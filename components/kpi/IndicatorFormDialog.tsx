@@ -13,24 +13,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-
-interface KPICategory {
-  id: string
-  category: 'P1' | 'P2' | 'P3'
-  category_name: string
-}
-
-interface KPIIndicator {
-  id: string
-  category_id: string
-  code: string
-  name: string
-  target_value: number
-  weight_percentage: number
-  measurement_unit: string | null
-  description: string | null
-  is_active: boolean
-}
+import type { KPICategory, KPIIndicator } from '@/lib/types/kpi.types'
 
 interface IndicatorFormDialogProps {
   open: boolean

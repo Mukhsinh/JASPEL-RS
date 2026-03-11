@@ -14,23 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-
-interface KPIIndicator {
-    id: string
-    name: string
-}
-
-interface KPISubIndicator {
-    id: string
-    indicator_id: string
-    name: string
-    description: string | null
-    weight: number
-    target_value: number | null
-    unit: string | null
-    calculation_method: string | null
-    is_active: boolean
-}
+import type { KPIIndicator, KPISubIndicator } from '@/lib/types/kpi.types'
 
 interface SubIndicatorFormDialogProps {
     open: boolean
@@ -54,10 +38,19 @@ export default function SubIndicatorFormDialog({
     const [formData, setFormData] = useState({
         name: '',
         description: '',
-        weight: '',
+        weight_percentage: '',
         target_value: '',
-        unit: '',
-        calculation_method: ''
+        measurement_unit: '',
+        score_1: '20',
+        score_2: '40', 
+        score_3: '60',
+        score_4: '80',
+        score_5: '100',
+        score_1_label: 'Sangat Kurang',
+        score_2_label: 'Kurang',
+        score_3_label: 'Cukup',
+        score_4_label: 'Baik',
+        score_5_label: 'Sangat Baik'
     })
     const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -66,28 +59,46 @@ export default function SubIndicatorFormDialog({
             setFormData({
                 name: subIndicator.name,
                 description: subIndicator.description || '',
-                weight: subIndicator.weight.toString(),
+                weight_percentage: subIndicator.weight_percentage.toString(),
                 target_value: subIndicator.target_value?.toString() || '',
-                unit: subIndicator.unit || '',
-                calculation_method: subIndicator.calculation_method || ''
+                measurement_unit: subIndicator.measurement_unit || '',
+                score_1: subIndicator.score_1.toString(),
+                score_2: subIndicator.score_2.toString(),
+                score_3: subIndicator.score_3.toString(),
+                score_4: subIndicator.score_4.toString(),
+                score_5: subIndicator.score_5.toString(),
+                score_1_label: subIndicator.score_1_label,
+                score_2_label: subIndicator.score_2_label,
+                score_3_label: subIndicator.score_3_label,
+                score_4_label: subIndicator.score_4_label,
+                score_5_label: subIndicator.score_5_label
             })
         } else {
             setFormData({
                 name: '',
                 description: '',
-                weight: '',
+                weight_percentage: '',
                 target_value: '',
-                unit: '',
-                calculation_method: ''
+                measurement_unit: '',
+                score_1: '20',
+                score_2: '40', 
+                score_3: '60',
+                score_4: '80',
+                score_5: '100',
+                score_1_label: 'Sangat Kurang',
+                score_2_label: 'Kurang',
+                score_3_label: 'Cukup',
+                score_4_label: 'Baik',
+                score_5_label: 'Sangat Baik'
             })
         }
         setErrors({})
     }, [subIndicator, open])
 
     function getTotalWeightInfo(): { total: number; isValid: boolean; message: string } {
-        const weight = parseFloat(formData.weight) || 0
+        const weight = parseFloat(formData.weight_percentage) || 0
         const others = existingSubIndicators.filter(s => s.id !== subIndicator?.id)
-        const otherWeightsSum = others.reduce((sum, s) => sum + Number(s.weight), 0)
+        const otherWeightsSum = others.reduce((sum, s) => sum + Number(s.weight_percentage), 0)
         const totalWeight = otherWeightsSum + weight
         const isValid = Math.abs(totalWeight - 100) < 0.01
 
@@ -107,20 +118,20 @@ export default function SubIndicatorFormDialog({
             newErrors.name = 'Nama sub indikator wajib diisi'
         }
 
-        if (!formData.weight) {
-            newErrors.weight = 'Bobot wajib diisi'
+        if (!formData.weight_percentage) {
+            newErrors.weight_percentage = 'Bobot wajib diisi'
         } else {
-            const weight = parseFloat(formData.weight)
+            const weight = parseFloat(formData.weight_percentage)
             if (isNaN(weight) || weight <= 0 || weight > 100) {
-                newErrors.weight = 'Bobot harus antara 0.01 dan 100'
+                newErrors.weight_percentage = 'Bobot harus antara 0.01 dan 100'
             } else {
                 // Validate total weight doesn't exceed 100%
                 const others = existingSubIndicators.filter(s => s.id !== subIndicator?.id)
-                const otherWeightsSum = others.reduce((sum, s) => sum + Number(s.weight), 0)
+                const otherWeightsSum = others.reduce((sum, s) => sum + Number(s.weight_percentage), 0)
                 const totalWeight = otherWeightsSum + weight
                 
                 if (totalWeight > 100.01) { // Allow small floating point tolerance
-                    newErrors.weight = `Total bobot akan menjadi ${totalWeight.toFixed(2)}% (maksimal 100%)`
+                    newErrors.weight_percentage = `Total bobot akan menjadi ${totalWeight.toFixed(2)}% (maksimal 100%)`
                 }
             }
         }
@@ -146,10 +157,19 @@ export default function SubIndicatorFormDialog({
                 indicator_id: subIndicator?.indicator_id || indicator?.id,
                 name: formData.name.trim(),
                 description: formData.description.trim() || null,
-                weight: parseFloat(formData.weight),
-                target_value: formData.target_value ? parseFloat(formData.target_value) : null,
-                unit: formData.unit.trim() || null,
-                calculation_method: formData.calculation_method.trim() || null,
+                weight_percentage: parseFloat(formData.weight_percentage),
+                target_value: formData.target_value ? parseFloat(formData.target_value) : 100,
+                measurement_unit: formData.measurement_unit.trim() || null,
+                score_1: parseFloat(formData.score_1),
+                score_2: parseFloat(formData.score_2),
+                score_3: parseFloat(formData.score_3),
+                score_4: parseFloat(formData.score_4),
+                score_5: parseFloat(formData.score_5),
+                score_1_label: formData.score_1_label,
+                score_2_label: formData.score_2_label,
+                score_3_label: formData.score_3_label,
+                score_4_label: formData.score_4_label,
+                score_5_label: formData.score_5_label,
                 is_active: true
             }
 
@@ -161,9 +181,19 @@ export default function SubIndicatorFormDialog({
 
                 if (error) throw error
             } else {
+                // Generate code for new sub indicator
+                const maxCode = Math.max(
+                    ...existingSubIndicators.map(s => {
+                        const match = s.code.match(/(\d+)$/)
+                        return match ? parseInt(match[1]) : 0
+                    }),
+                    0
+                )
+                const newCode = `SUB${String(maxCode + 1).padStart(3, '0')}`
+
                 const { error } = await supabase
                     .from('m_kpi_sub_indicators')
-                    .insert(data)
+                    .insert({ ...data, code: newCode })
 
                 if (error) throw error
             }
@@ -180,7 +210,7 @@ export default function SubIndicatorFormDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[500px]">
+            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
                         <DialogTitle>{subIndicator ? 'Ubah Sub Indikator' : 'Tambah Sub Indikator'}</DialogTitle>
@@ -212,12 +242,12 @@ export default function SubIndicatorFormDialog({
                                     step="0.01"
                                     min="0"
                                     max="100"
-                                    value={formData.weight}
-                                    onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
+                                    value={formData.weight_percentage}
+                                    onChange={(e) => setFormData({ ...formData, weight_percentage: e.target.value })}
                                     placeholder="25.00"
                                 />
-                                {errors.weight && <p className="text-sm text-red-600">{errors.weight}</p>}
-                                {formData.weight && !errors.weight && (() => {
+                                {errors.weight_percentage && <p className="text-sm text-red-600">{errors.weight_percentage}</p>}
+                                {formData.weight_percentage && !errors.weight_percentage && (() => {
                                     const weightInfo = getTotalWeightInfo()
                                     return (
                                         <p className={`text-xs font-medium ${weightInfo.isValid ? 'text-green-600' : 'text-amber-600'}`}>
@@ -240,25 +270,14 @@ export default function SubIndicatorFormDialog({
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="sub_unit">Satuan</Label>
-                                <Input
-                                    id="sub_unit"
-                                    value={formData.unit}
-                                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                                    placeholder="%, pasien, jam"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="sub_method">Metode Perhitungan</Label>
-                                <Input
-                                    id="sub_method"
-                                    value={formData.calculation_method}
-                                    onChange={(e) => setFormData({ ...formData, calculation_method: e.target.value })}
-                                    placeholder="rata-rata, total, dll"
-                                />
-                            </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="sub_unit">Satuan</Label>
+                            <Input
+                                id="sub_unit"
+                                value={formData.measurement_unit}
+                                onChange={(e) => setFormData({ ...formData, measurement_unit: e.target.value })}
+                                placeholder="%, pasien, jam"
+                            />
                         </div>
 
                         <div className="space-y-2">

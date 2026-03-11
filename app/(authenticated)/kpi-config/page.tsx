@@ -8,6 +8,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Plus, Copy, Download, Building2 } from 'lucide-react'
 import dynamic from 'next/dynamic'
+import type { 
+  KPICategory, 
+  KPIIndicator, 
+  KPISubIndicator,
+  KPICategoryWithIndicators,
+  KPIIndicatorWithSubIndicators
+} from '@/lib/types/kpi.types'
 
 // Lazy load heavy components
 const KPITree = dynamic(() => import('@/components/kpi/KPITree'), {
@@ -22,50 +29,6 @@ interface Unit {
   id: string
   code: string
   name: string
-}
-
-interface KPICategory {
-  id: string
-  unit_id: string
-  category: 'P1' | 'P2' | 'P3'
-  category_name: string
-  weight_percentage: number
-  description: string | null
-  is_active: boolean
-}
-
-interface KPIIndicator {
-  id: string
-  category_id: string
-  code: string
-  name: string
-  target_value: number
-  weight_percentage: number
-  measurement_unit: string | null
-  description: string | null
-  is_active: boolean
-}
-
-interface KPISubIndicator {
-  id: string
-  indicator_id: string
-  code: string
-  name: string
-  target_value: number
-  weight_percentage: number
-  score_1: number
-  score_2: number
-  score_3: number
-  score_4: number
-  score_5: number
-  score_1_label: string
-  score_2_label: string
-  score_3_label: string
-  score_4_label: string
-  score_5_label: string
-  measurement_unit: string | null
-  description: string | null
-  is_active: boolean
 }
 
 export default function KPIConfigPage() {

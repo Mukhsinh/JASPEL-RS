@@ -112,9 +112,9 @@ function generateExcelReport(unit: any, categories: any[]) {
     
     summaryData.push([
       `${cat.category} - ${cat.category_name}`,
-      cat.weight_percentage,
-      indicators.length,
-      subIndicatorCount
+      cat.weight_percentage.toString(),
+      indicators.length.toString(),
+      subIndicatorCount.toString()
     ])
 
     totalCategories++
@@ -125,7 +125,7 @@ function generateExcelReport(unit: any, categories: any[]) {
 
   summaryData.push(
     [],
-    ['TOTAL', totalCategoryWeight, totalIndicators, totalSubIndicators],
+    ['TOTAL', totalCategoryWeight.toString(), totalIndicators.toString(), totalSubIndicators.toString()],
     [],
     ['Validasi Bobot Kategori:', totalCategoryWeight === 100 ? 'VALID ✓' : `TIDAK VALID (${totalCategoryWeight}%)`]
   )

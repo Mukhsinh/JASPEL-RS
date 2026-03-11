@@ -3,50 +3,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight, Edit, Trash2, Plus, Layers } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-
-interface KPICategory {
-  id: string
-  unit_id: string
-  category: 'P1' | 'P2' | 'P3'
-  category_name: string
-  weight_percentage: number
-  description: string | null
-  is_active: boolean
-}
-
-interface KPIIndicator {
-  id: string
-  category_id: string
-  code: string
-  name: string
-  target_value: number
-  weight_percentage: number
-  measurement_unit: string | null
-  description: string | null
-  is_active: boolean
-}
-
-interface KPISubIndicator {
-  id: string
-  indicator_id: string
-  code: string
-  name: string
-  target_value: number
-  weight_percentage: number
-  score_1: number
-  score_2: number
-  score_3: number
-  score_4: number
-  score_5: number
-  score_1_label: string
-  score_2_label: string
-  score_3_label: string
-  score_4_label: string
-  score_5_label: string
-  measurement_unit: string | null
-  description: string | null
-  is_active: boolean
-}
+import type { KPICategory, KPIIndicator, KPISubIndicator } from '@/lib/types/kpi.types'
 
 interface KPITreeProps {
   categories: KPICategory[]

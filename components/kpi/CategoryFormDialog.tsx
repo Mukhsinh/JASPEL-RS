@@ -13,16 +13,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-
-interface KPICategory {
-  id: string
-  unit_id: string
-  category: 'P1' | 'P2' | 'P3'
-  category_name: string
-  weight_percentage: number
-  description: string | null
-  is_active: boolean
-}
+import type { KPICategory } from '@/lib/types/kpi.types'
 
 interface CategoryFormDialogProps {
   open: boolean
