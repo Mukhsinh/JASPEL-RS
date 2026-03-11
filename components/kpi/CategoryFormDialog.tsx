@@ -81,8 +81,17 @@ export default function CategoryFormDialog({
       newErrors.weight_percentage = 'Persentase bobot wajib diisi'
     } else {
       const weight = parseFloat(formData.weight_percentage)
-      if (isNaN(weight) || weight < 0 || weight > 100) {
-        newErrors.weight_percentage = 'Bobot harus antara 0 dan 100'
+      if (isNaN(weight) || weight <= 0 || weight > 100) {
+        newErrors.weight_percentage = 'Bobot harus antara 0.01 dan 100'
+      } else {
+        // Check if total weight would exceed 100%
+        const otherCategories = existingCategories.filter(c => c.id !== category?.id)
+        const otherWeightsSum = otherCategories.reduce((sum, c) => sum + Number(c.weight_percentage), 0)
+        const totalWeight = otherWeightsSum + weight
+
+        if (totalWeight > 100.01) { // Allow small floating point tolerance
+          newErrors.weight_percentage = `Total bobot akan menjadi ${totalWeight.toFixed(2)}% (maksimal 100%)`
+        }
       }
     }
 

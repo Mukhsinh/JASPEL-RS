@@ -266,24 +266,42 @@ export default function KPIConfigPage() {
   }, [loadKPIStructure])
 
   const handleDeleteSubIndicator = useCallback(async (subIndicatorId: string) => {
-    if (!confirm('Hapus sub indikator ini? Tindakan ini tidak dapat dibatalkan.')) {
-      return
-    }
+    const subIndicator = subIndicators.find(s => s.id === subIndicatorId)
+    if (!subIndicator) return
+
+    if (!confirm(`Apakah Anda yakin ingin menghapus sub indikator "${subIndicator.code} - ${subIndicator.name}"?\n\nTindakan ini tidak dapat dibatalkan.`)) return
 
     try {
       const supabase = createClient()
+      
+      // Check if sub indicator is being used in realization data
+      const { data: realizationData, error: checkError } = await supabase
+        .from('t_realization')
+        .select('id')
+        .eq('sub_indicator_id', subIndicatorId)
+        .limit(1)
+
+      if (checkError) throw checkError
+
+      if (realizationData && realizationData.length > 0) {
+        alert('Sub indikator ini tidak dapat dihapus karena sudah digunakan dalam data realisasi KPI.')
+        return
+      }
+
       const { error } = await supabase
         .from('m_kpi_sub_indicators')
         .delete()
         .eq('id', subIndicatorId)
 
       if (error) throw error
+
       await loadKPIStructure()
-    } catch (error) {
+      alert('Sub indikator berhasil dihapus')
+    } catch (error: any) {
       console.error('Error deleting sub indicator:', error)
-      alert('Gagal menghapus sub indikator')
+      alert(error.message || 'Gagal menghapus sub indikator')
     }
-  }, [loadKPIStructure])
+  }, [subIndicators, loadKPIStructure])
 
   const handleCopyStructure = useCallback(() => {
     setIsCopyDialogOpen(true)
@@ -297,6 +315,11 @@ export default function KPIConfigPage() {
   const handleDownloadGuide = useCallback(() => {
     window.open('/api/kpi-config/guide', '_blank')
   }, [])
+
+  const handleDownloadReport = useCallback((format: 'excel' | 'pdf') => {
+    if (!selectedUnit) return
+    window.open(`/api/kpi-config/export?unitId=${selectedUnit}&format=${format}`, '_blank')
+  }, [selectedUnit])
 
   if (isLoading && units.length === 0) {
     return (
@@ -320,8 +343,26 @@ export default function KPIConfigPage() {
             className="bg-purple-500 hover:bg-purple-600 text-white shadow-md hover:shadow-lg transition-all"
           >
             <Download className="h-4 w-4 mr-2" />
-            Unduh Petunjuk PDF
+            Petunjuk PDF
           </Button>
+          {selectedUnit && (
+            <>
+              <Button
+                onClick={() => handleDownloadReport('excel')}
+                className="bg-green-600 hover:bg-green-700 text-white shadow-md hover:shadow-lg transition-all"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Laporan Excel
+              </Button>
+              <Button
+                onClick={() => handleDownloadReport('pdf')}
+                className="bg-red-600 hover:bg-red-700 text-white shadow-md hover:shadow-lg transition-all"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Laporan PDF
+              </Button>
+            </>
+          )}
           <Button
             onClick={handleCopyStructure}
             className="bg-cyan-500 hover:bg-cyan-600 text-white shadow-md hover:shadow-lg transition-all"

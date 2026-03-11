@@ -363,8 +363,13 @@ export default function KPITree({
                                         <Button
                                           size="sm"
                                           variant="ghost"
-                                          onClick={() => onDeleteSubIndicator(sub.id)}
-                                          className="h-7 w-7 p-0"
+                                          onClick={(e) => {
+                                            e.preventDefault()
+                                            e.stopPropagation()
+                                            onDeleteSubIndicator(sub.id)
+                                          }}
+                                          className="h-7 w-7 p-0 hover:bg-red-50"
+                                          title="Hapus Sub Indikator"
                                         >
                                           <Trash2 className="h-3.5 w-3.5 text-red-600" />
                                         </Button>

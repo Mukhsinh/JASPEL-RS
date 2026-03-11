@@ -1,0 +1,328 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+
+export async function GET(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const { searchParams } = new URL(request.url)
+    const action = searchParams.get('action')
+    const period = searchParams.get('period')
+    const unitId = searchParams.get('unit_id')
+
+    // Check authentication
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
+    switch (action) {
+      case 'periods':
+        return await getAvailablePeriods(supabase)
+      
+      case 'units':
+        return await getAvailableUnits(supabase, user)
+      
+      case 'report':
+        if (!period) {
+          return NextResponse.json({ success: false, error: 'Period is required' }, { status: 400 })
+        }
+        return await getAssessmentReport(supabase, user, period, unitId)
+      
+      case 'comparison':
+        if (!period) {
+          return NextResponse.json({ success: false, error: 'Period is required' }, { status: 400 })
+        }
+        return await getPeriodComparison(supabase, user, period, unitId)
+      
+      default:
+        return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 })
+    }
+  } catch (error) {
+    console.error('Assessment reports API error:', error)
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+async function getAvailablePeriods(supabase: any) {
+  const { data, error } = await supabase
+    .from('t_pool')
+    .select('period')
+    .in('status', ['approved', 'distributed'])
+    .order('period', { ascending: false })
+
+  if (error) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  }
+
+  const periods = data?.map((item: any) => item.period) || []
+  return NextResponse.json({ success: true, periods })
+}
+
+async function getAvailableUnits(supabase: any, user: any) {
+  // Get user role
+  const userRole = user.user_metadata?.role
+
+  let query = supabase
+    .from('m_units')
+    .select('id, name')
+    .eq('is_active', true)
+    .order('name')
+
+  // If unit manager, only show their unit
+  if (userRole === 'unit_manager') {
+    const { data: userEmployee } = await supabase
+      .from('m_employees')
+      .select('unit_id')
+      .eq('user_id', user.id)
+      .single()
+
+    if (userEmployee) {
+      query = query.eq('id', userEmployee.unit_id)
+    }
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true, units: data || [] })
+}
+
+async function getAssessmentReport(supabase: any, user: any, period: string, unitId?: string | null) {
+  const userRole = user.user_metadata?.role
+
+  // Build base query for assessment status
+  let statusQuery = supabase
+    .from('v_assessment_status')
+    .select('*')
+    .eq('period', period)
+
+  // Apply unit filtering based on role
+  if (userRole === 'unit_manager') {
+    const { data: userEmployee } = await supabase
+      .from('m_employees')
+      .select('unit_id')
+      .eq('user_id', user.id)
+      .single()
+
+    if (userEmployee) {
+      statusQuery = statusQuery.eq('unit_id', userEmployee.unit_id)
+    }
+  } else if (unitId && unitId !== 'all') {
+    statusQuery = statusQuery.eq('unit_id', unitId)
+  }
+
+  const { data: statusData, error: statusError } = await statusQuery
+
+  if (statusError) {
+    return NextResponse.json({ success: false, error: statusError.message }, { status: 500 })
+  }
+
+  if (!statusData || statusData.length === 0) {
+    return NextResponse.json({
+      success: true,
+      report: {
+        period,
+        unit_id: unitId,
+        unit_name: null,
+        total_employees: 0,
+        assessed_employees: 0,
+        completion_rate: 0,
+        average_score: 0,
+        category_breakdown: { p1_average: 0, p2_average: 0, p3_average: 0 },
+        status_distribution: { completed: 0, partial: 0, not_started: 0 },
+        top_performers: [],
+        improvement_areas: []
+      }
+    })
+  }
+
+  // Calculate summary statistics
+  const totalEmployees = statusData.length
+  const assessedEmployees = statusData.filter((s: any) => s.assessed_indicators > 0).length
+  const completedEmployees = statusData.filter((s: any) => s.status === 'Selesai').length
+  const partialEmployees = statusData.filter((s: any) => s.status === 'Sebagian').length
+  const notStartedEmployees = statusData.filter((s: any) => s.status === 'Belum Dinilai').length
+  const completionRate = totalEmployees > 0 ? (completedEmployees / totalEmployees) * 100 : 0
+
+  // Get detailed assessment data for score calculations
+  let assessmentQuery = supabase
+    .from('t_kpi_assessments')
+    .select(`
+      *,
+      m_employees!employee_id (
+        full_name,
+        unit_id,
+        m_units!unit_id (name)
+      ),
+      m_kpi_indicators!indicator_id (
+        name,
+        m_kpi_categories!category_id (
+          category
+        )
+      )
+    `)
+    .eq('period', period)
+
+  // Apply same unit filtering
+  if (userRole === 'unit_manager') {
+    const { data: userEmployee } = await supabase
+      .from('m_employees')
+      .select('unit_id')
+      .eq('user_id', user.id)
+      .single()
+
+    if (userEmployee) {
+      assessmentQuery = assessmentQuery.eq('m_employees.unit_id', userEmployee.unit_id)
+    }
+  } else if (unitId && unitId !== 'all') {
+    assessmentQuery = assessmentQuery.eq('m_employees.unit_id', unitId)
+  }
+
+  const { data: assessmentData, error: assessmentError } = await assessmentQuery
+
+  if (assessmentError) {
+    return NextResponse.json({ success: false, error: assessmentError.message }, { status: 500 })
+  }
+
+  // Calculate category averages
+  const categoryScores = { p1: [], p2: [], p3: [] } as any
+  const employeeScores = new Map()
+  const indicatorAchievements = new Map()
+
+  assessmentData?.forEach((assessment: any) => {
+    const category = assessment.m_kpi_indicators.m_kpi_categories.category.toLowerCase()
+    const score = assessment.score || 0
+    const achievement = assessment.achievement_percentage || 0
+    const employeeId = assessment.employee_id
+    const indicatorName = assessment.m_kpi_indicators.name
+
+    // Collect category scores
+    if (categoryScores[category]) {
+      categoryScores[category].push(score)
+    }
+
+    // Collect employee total scores
+    if (!employeeScores.has(employeeId)) {
+      employeeScores.set(employeeId, {
+        employee_name: assessment.m_employees.full_name,
+        unit_name: assessment.m_employees.m_units.name,
+        scores: []
+      })
+    }
+    employeeScores.get(employeeId).scores.push(score)
+
+    // Collect indicator achievements for improvement areas
+    if (!indicatorAchievements.has(indicatorName)) {
+      indicatorAchievements.set(indicatorName, {
+        indicator_name: indicatorName,
+        category: assessment.m_kpi_indicators.m_kpi_categories.category,
+        achievements: []
+      })
+    }
+    indicatorAchievements.get(indicatorName).achievements.push(achievement)
+  })
+
+  // Calculate averages
+  const p1Average = categoryScores.p1.length > 0 ? 
+    categoryScores.p1.reduce((a: number, b: number) => a + b, 0) / categoryScores.p1.length : 0
+  const p2Average = categoryScores.p2.length > 0 ? 
+    categoryScores.p2.reduce((a: number, b: number) => a + b, 0) / categoryScores.p2.length : 0
+  const p3Average = categoryScores.p3.length > 0 ? 
+    categoryScores.p3.reduce((a: number, b: number) => a + b, 0) / categoryScores.p3.length : 0
+
+  const overallAverage = assessmentData && assessmentData.length > 0 ?
+    assessmentData.reduce((sum: number, a: any) => sum + (a.score || 0), 0) / assessmentData.length : 0
+
+  // Calculate top performers
+  const topPerformers = Array.from(employeeScores.entries())
+    .map(([employeeId, data]: [string, any]) => ({
+      employee_id: employeeId,
+      employee_name: data.employee_name,
+      unit_name: data.unit_name,
+      total_score: data.scores.reduce((a: number, b: number) => a + b, 0) / data.scores.length
+    }))
+    .sort((a, b) => b.total_score - a.total_score)
+    .slice(0, 10)
+
+  // Calculate improvement areas
+  const improvementAreas = Array.from(indicatorAchievements.entries())
+    .map(([indicatorName, data]: [string, any]) => ({
+      indicator_name: data.indicator_name,
+      category: data.category,
+      average_achievement: data.achievements.reduce((a: number, b: number) => a + b, 0) / data.achievements.length
+    }))
+    .sort((a, b) => a.average_achievement - b.average_achievement)
+    .slice(0, 10)
+
+  const report = {
+    period,
+    unit_id: unitId,
+    unit_name: unitId && unitId !== 'all' ? statusData[0]?.unit_name : null,
+    total_employees: totalEmployees,
+    assessed_employees: assessedEmployees,
+    completion_rate: completionRate,
+    average_score: overallAverage,
+    category_breakdown: {
+      p1_average: p1Average,
+      p2_average: p2Average,
+      p3_average: p3Average
+    },
+    status_distribution: {
+      completed: completedEmployees,
+      partial: partialEmployees,
+      not_started: notStartedEmployees
+    },
+    top_performers: topPerformers,
+    improvement_areas: improvementAreas
+  }
+
+  return NextResponse.json({ success: true, report })
+}
+
+async function getPeriodComparison(supabase: any, user: any, currentPeriod: string, unitId?: string | null) {
+  // Get previous period (assuming YYYY-MM format)
+  const [year, month] = currentPeriod.split('-').map(Number)
+  const prevDate = new Date(year, month - 2, 1) // month - 2 because Date month is 0-indexed
+  const previousPeriod = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`
+
+  // Get current period data
+  const currentResponse = await getAssessmentReport(supabase, user, currentPeriod, unitId)
+  const currentData = await currentResponse.json()
+
+  // Get previous period data
+  const previousResponse = await getAssessmentReport(supabase, user, previousPeriod, unitId)
+  const previousData = await previousResponse.json()
+
+  if (!currentData.success || !previousData.success) {
+    return NextResponse.json({ success: false, error: 'Failed to fetch comparison data' }, { status: 500 })
+  }
+
+  const current = currentData.report
+  const previous = previousData.report
+
+  const completionRateChange = current.completion_rate - previous.completion_rate
+  const averageScoreChange = current.average_score - previous.average_score
+
+  let trend: 'up' | 'down' | 'stable' = 'stable'
+  if (completionRateChange > 1 || averageScoreChange > 1) {
+    trend = 'up'
+  } else if (completionRateChange < -1 || averageScoreChange < -1) {
+    trend = 'down'
+  }
+
+  const comparison = {
+    current_period: currentPeriod,
+    previous_period: previousPeriod,
+    completion_rate_change: completionRateChange,
+    average_score_change: averageScoreChange,
+    trend
+  }
+
+  return NextResponse.json({ success: true, comparison })
+}

@@ -24,7 +24,8 @@ import {
   LogOut,
   Menu,
   X,
-  Bell
+  Bell,
+  ClipboardCheck
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -41,6 +42,7 @@ const iconMap: Record<string, any> = {
   Shield,
   User,
   Bell,
+  ClipboardCheck,
 }
 
 export default function Sidebar() {

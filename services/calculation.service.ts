@@ -3,7 +3,6 @@
 import { createClient } from '@/lib/supabase/server'
 import {
   calculateIndividualScore,
-  calculateFinalScore,
   calculateUnitAllocation,
   calculateIndividualIncentive,
   calculateNetIncentive,
@@ -12,7 +11,6 @@ import {
   aggregateCategoryScore,
   toNumber,
 } from '@/lib/formulas/kpi-calculator'
-import Decimal from 'decimal.js'
 
 interface IndicatorRealization {
   indicator_id: string
@@ -35,6 +33,8 @@ interface CalculationPrerequisites {
 
 /**
  * Calculate individual scores for all employees in a period
+ * Now supports both assessment data (t_kpi_assessments) and realization data (t_realization)
+ * Priority: Assessment data > Realization data
  */
 export async function calculateIndividualScores(period: string) {
   const supabase = await createClient()
@@ -50,16 +50,18 @@ export async function calculateIndividualScores(period: string) {
   const results = []
   
   for (const employee of employees!) {
-    // Get all realizations for this employee in this period
-    const { data: realizations, error: realError } = await supabase
-      .from('t_realization')
+    // First, try to get assessment data for this employee in this period
+    const { data: assessments, error: assessError } = await supabase
+      .from('t_kpi_assessments')
       .select(`
         id,
         realization_value,
         indicator_id,
+        target_value,
+        weight_percentage,
+        achievement_percentage,
+        score,
         m_kpi_indicators!inner (
-          target_value,
-          weight_percentage,
           category_id,
           m_kpi_categories!inner (
             category,
@@ -70,23 +72,66 @@ export async function calculateIndividualScores(period: string) {
       .eq('employee_id', employee.id)
       .eq('period', period)
     
-    if (realError) throw realError
+    if (assessError) throw assessError
+    
+    // If no assessments found, fallback to realization data
+    let dataSource = 'assessment'
+    let employeeData: any[] = assessments || []
+    
+    if (!assessments || assessments.length === 0) {
+      dataSource = 'realization'
+      const { data: realizations, error: realError } = await supabase
+        .from('t_realization')
+        .select(`
+          id,
+          realization_value,
+          indicator_id,
+          m_kpi_indicators!inner (
+            target_value,
+            weight_percentage,
+            category_id,
+            m_kpi_categories!inner (
+              category,
+              unit_id
+            )
+          )
+        `)
+        .eq('employee_id', employee.id)
+        .eq('period', period)
+      
+      if (realError) throw realError
+      employeeData = realizations || []
+    }
     
     // Group by category (P1, P2, P3)
     const p1Indicators: IndicatorRealization[] = []
     const p2Indicators: IndicatorRealization[] = []
     const p3Indicators: IndicatorRealization[] = []
     
-    realizations?.forEach((r: any) => {
+    employeeData.forEach((r: any) => {
       const indicator = r.m_kpi_indicators
-      const category = indicator.m_kpi_categories.category
+      let category: string
+      let targetValue: number
+      let weightPercentage: number
+      
+      if (dataSource === 'assessment') {
+        // Assessment data already has target_value and weight_percentage
+        category = indicator.m_kpi_categories.category
+        targetValue = r.target_value
+        weightPercentage = r.weight_percentage
+      } else {
+        // Realization data gets these from the indicator
+        category = indicator.m_kpi_categories.category
+        targetValue = indicator.target_value
+        weightPercentage = indicator.weight_percentage
+      }
       
       const data: IndicatorRealization = {
         indicator_id: r.indicator_id,
         realization_value: r.realization_value,
-        target_value: indicator.target_value,
-        weight_percentage: indicator.weight_percentage,
-        category,
+        target_value: targetValue,
+        weight_percentage: weightPercentage,
+        category: category as 'P1' | 'P2' | 'P3',
       }
       
       if (category === 'P1') p1Indicators.push(data)
@@ -106,17 +151,32 @@ export async function calculateIndividualScores(period: string) {
           ind.weight_percentage
         )
         
-        // Update realization with calculated values
-        supabase
-          .from('t_realization')
-          .update({
-            achievement_percentage: toNumber(achievement),
-            score: toNumber(weighted),
-          })
-          .eq('indicator_id', ind.indicator_id)
-          .eq('employee_id', employee.id)
-          .eq('period', period)
-          .then()
+        // Update the appropriate table with calculated values
+        if (dataSource === 'assessment') {
+          // Update assessment table
+          supabase
+            .from('t_kpi_assessments')
+            .update({
+              achievement_percentage: toNumber(achievement),
+              score: toNumber(weighted),
+            })
+            .eq('indicator_id', ind.indicator_id)
+            .eq('employee_id', employee.id)
+            .eq('period', period)
+            .then()
+        } else {
+          // Update realization table
+          supabase
+            .from('t_realization')
+            .update({
+              achievement_percentage: toNumber(achievement),
+              score: toNumber(weighted),
+            })
+            .eq('indicator_id', ind.indicator_id)
+            .eq('employee_id', employee.id)
+            .eq('period', period)
+            .then()
+        }
         
         return toNumber(weighted)
       })
@@ -144,7 +204,7 @@ export async function calculateIndividualScores(period: string) {
     // Calculate weighted individual score
     const individualScores = calculateIndividualScore(p1Score, p2Score, p3Score, weights)
     
-    // Upsert to t_individual_scores
+    // Upsert to t_individual_scores with data source metadata
     const { error: upsertError } = await supabase
       .from('t_individual_scores')
       .upsert({
@@ -159,6 +219,13 @@ export async function calculateIndividualScores(period: string) {
         individual_total_score: toNumber(individualScores.totalIndividualScore),
         individual_weight_percentage: 100, // Default, can be customized
         weighted_individual_score: toNumber(individualScores.totalIndividualScore),
+        calculation_metadata: {
+          data_source: dataSource,
+          calculated_at: new Date().toISOString(),
+          has_assessment_data: dataSource === 'assessment',
+          assessment_count: dataSource === 'assessment' ? assessments?.length : 0,
+          realization_count: dataSource === 'realization' ? employeeData?.length : 0,
+        },
       }, {
         onConflict: 'employee_id,period'
       })
@@ -167,11 +234,126 @@ export async function calculateIndividualScores(period: string) {
     
     results.push({
       employee_id: employee.id,
+      data_source: dataSource,
       ...individualScores,
     })
   }
   
   return results
+}
+
+/**
+ * Get assessment data aggregated by employee for a period
+ * Used for reporting and validation purposes
+ */
+export async function getAssessmentDataSummary(period: string) {
+  const supabase = await createClient()
+  
+  const { data: summary, error } = await supabase
+    .from('t_kpi_assessments')
+    .select(`
+      employee_id,
+      m_employees!inner (
+        full_name,
+        unit_id,
+        m_units!inner (
+          name
+        )
+      ),
+      indicator_id,
+      m_kpi_indicators!inner (
+        name,
+        category_id,
+        m_kpi_categories!inner (
+          category,
+          category_name
+        )
+      ),
+      realization_value,
+      target_value,
+      achievement_percentage,
+      score,
+      assessor_id,
+      created_at,
+      updated_at
+    `)
+    .eq('period', period)
+    .order('m_employees.full_name, m_kpi_categories.category, m_kpi_indicators.name')
+  
+  if (error) throw error
+  
+  return summary || []
+}
+
+/**
+ * Check if assessment data exists for a period
+ * Used to determine calculation data source priority
+ */
+export async function hasAssessmentData(period: string): Promise<boolean> {
+  const supabase = await createClient()
+  
+  const { count, error } = await supabase
+    .from('t_kpi_assessments')
+    .select('*', { count: 'exact', head: true })
+    .eq('period', period)
+  
+  if (error) throw error
+  
+  return (count || 0) > 0
+}
+
+/**
+ * Get mixed data source summary for a period
+ * Shows which employees have assessment vs realization data
+ */
+export async function getDataSourceSummary(period: string) {
+  const supabase = await createClient()
+  
+  // Get all active employees
+  const { data: employees, error: empError } = await supabase
+    .from('m_employees')
+    .select(`
+      id,
+      full_name,
+      unit_id,
+      m_units!inner (
+        name
+      )
+    `)
+    .eq('is_active', true)
+  
+  if (empError) throw empError
+  
+  const summary = []
+  
+  for (const employee of employees!) {
+    // Check assessment data
+    const { count: assessmentCount } = await supabase
+      .from('t_kpi_assessments')
+      .select('*', { count: 'exact', head: true })
+      .eq('employee_id', employee.id)
+      .eq('period', period)
+    
+    // Check realization data
+    const { count: realizationCount } = await supabase
+      .from('t_realization')
+      .select('*', { count: 'exact', head: true })
+      .eq('employee_id', employee.id)
+      .eq('period', period)
+    
+    summary.push({
+      employee_id: employee.id,
+      full_name: employee.full_name,
+      unit_id: employee.unit_id,
+      unit_name: (employee.m_units as any).name,
+      assessment_count: assessmentCount || 0,
+      realization_count: realizationCount || 0,
+      primary_data_source: (assessmentCount || 0) > 0 ? 'assessment' : 'realization',
+      has_mixed_data: (assessmentCount || 0) > 0 && (realizationCount || 0) > 0,
+    })
+  }
+  
+  return summary
 }
 
 /**
@@ -396,7 +578,7 @@ async function validateCalculationPrerequisites(period: string): Promise<Calcula
     })
   }
   
-  // 2. Check if all active employees have realization data
+  // 2. Check if all active employees have assessment or realization data
   const { data: employees } = await supabase
     .from('m_employees')
     .select('id, full_name, unit_id')
@@ -413,20 +595,32 @@ async function validateCalculationPrerequisites(period: string): Promise<Calcula
       
       if (indicators) {
         for (const indicator of indicators) {
-          const { data: realization } = await supabase
-            .from('t_realization')
+          // Check assessment data first
+          const { data: assessment } = await supabase
+            .from('t_kpi_assessments')
             .select('id')
             .eq('employee_id', employee.id)
             .eq('indicator_id', indicator.id)
             .eq('period', period)
             .single()
           
-          if (!realization) {
-            errors.push({
-              type: 'missing_realization',
-              message: `Missing realization data for employee ${employee.full_name}, indicator ${indicator.name}`,
-              details: { employee_id: employee.id, indicator_id: indicator.id },
-            })
+          // If no assessment, check realization data
+          if (!assessment) {
+            const { data: realization } = await supabase
+              .from('t_realization')
+              .select('id')
+              .eq('employee_id', employee.id)
+              .eq('indicator_id', indicator.id)
+              .eq('period', period)
+              .single()
+            
+            if (!realization) {
+              errors.push({
+                type: 'missing_data',
+                message: `Missing assessment or realization data for employee ${employee.full_name}, indicator ${indicator.name}`,
+                details: { employee_id: employee.id, indicator_id: indicator.id },
+              })
+            }
           }
         }
       }

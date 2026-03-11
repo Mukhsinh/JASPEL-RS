@@ -1,0 +1,292 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Search, Filter, RefreshCw, BarChart3, AlertCircle } from 'lucide-react'
+import AssessmentTable from './AssessmentTable'
+import AssessmentReports from './AssessmentReports'
+import type { AssessmentStatus } from '@/lib/types/assessment.types'
+
+interface AssessmentPageContentProps {
+  currentEmployee: {
+    id: string
+    role: string
+    unit_id: string
+    full_name: string
+  }
+  availablePeriods: string[]
+}
+
+export default function AssessmentPageContent({ 
+  currentEmployee, 
+  availablePeriods 
+}: AssessmentPageContentProps) {
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(availablePeriods[0] || '')
+  const [employees, setEmployees] = useState<AssessmentStatus[]>([])
+  const [filteredEmployees, setFilteredEmployees] = useState<AssessmentStatus[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [summary, setSummary] = useState({
+    total_employees: 0,
+    completed: 0,
+    partial: 0,
+    not_started: 0,
+    completion_rate: 0
+  })
+
+  // Load employees for assessment
+  const loadEmployees = async () => {
+    if (!selectedPeriod) return
+
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const response = await fetch(`/api/assessment/employees?period=${selectedPeriod}`)
+      if (response.ok) {
+        const data = await response.json()
+        setEmployees(data.employees || [])
+      } else {
+        const errorData = await response.json()
+        setError(errorData.error || 'Gagal memuat data pegawai')
+        setEmployees([])
+      }
+    } catch (error) {
+      console.error('Error loading employees:', error)
+      setError('Terjadi kesalahan saat memuat data')
+      setEmployees([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Load assessment status summary
+  const loadSummary = async () => {
+    if (!selectedPeriod) return
+
+    try {
+      const response = await fetch(`/api/assessment/status?period=${selectedPeriod}`)
+      if (response.ok) {
+        const data = await response.json()
+        setSummary(data.summary || {
+          total_employees: 0,
+          completed: 0,
+          partial: 0,
+          not_started: 0,
+          completion_rate: 0
+        })
+      }
+    } catch (error) {
+      console.error('Error loading summary:', error)
+    }
+  }
+
+  // Filter employees based on search and status
+  useEffect(() => {
+    let filtered = employees
+
+    // Apply search filter
+    if (searchTerm) {
+      filtered = filtered.filter(emp => 
+        emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        emp.unit_name.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    }
+
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(emp => emp.status === statusFilter)
+    }
+
+    setFilteredEmployees(filtered)
+  }, [employees, searchTerm, statusFilter])
+
+  // Load data when period changes
+  useEffect(() => {
+    if (selectedPeriod) {
+      loadEmployees()
+      loadSummary()
+    }
+  }, [selectedPeriod])
+
+  // Handle refresh
+  const handleRefresh = () => {
+    loadEmployees()
+    loadSummary()
+  }
+
+  // Handle assessment completion (callback from table)
+  const handleAssessmentComplete = () => {
+    loadEmployees()
+    loadSummary()
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Terjadi Kesalahan</h3>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <Button onClick={handleRefresh} variant="outline">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Coba Lagi
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Period Selection and Summary */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">Periode Penilaian</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+              <SelectTrigger>
+                <SelectValue placeholder="Pilih periode" />
+              </SelectTrigger>
+              <SelectContent>
+                {availablePeriods.map(period => (
+                  <SelectItem key={period} value={period}>
+                    {period}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">Total Pegawai</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{summary.total_employees}</div>
+            <p className="text-xs text-muted-foreground">Pegawai aktif</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">Selesai Dinilai</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{summary.completed}</div>
+            <p className="text-xs text-muted-foreground">
+              {summary.partial} sebagian, {summary.not_started} belum
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">Tingkat Penyelesaian</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">{summary.completion_rate}%</div>
+            <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+              <div 
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                style={{ width: `${summary.completion_rate}%` }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main Content with Tabs */}
+      <Tabs defaultValue="assessment" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="assessment">Penilaian</TabsTrigger>
+          <TabsTrigger value="reports">
+            <BarChart3 className="h-4 w-4 mr-2" />
+            Laporan
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="assessment">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <CardTitle>Daftar Pegawai</CardTitle>
+                  <CardDescription>
+                    Kelola penilaian KPI untuk pegawai di periode {selectedPeriod}
+                  </CardDescription>
+                </div>
+                <Button onClick={handleRefresh} variant="outline" size="sm" disabled={loading}>
+                  <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Input
+                    placeholder="Cari nama pegawai atau unit..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-gray-400" />
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Semua Status</SelectItem>
+                      <SelectItem value="Belum Dinilai">Belum Dinilai</SelectItem>
+                      <SelectItem value="Sebagian">Sebagian</SelectItem>
+                      <SelectItem value="Selesai">Selesai</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Status Legend */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                <Badge variant="destructive" className="text-xs">
+                  Belum Dinilai
+                </Badge>
+                <Badge variant="secondary" className="text-xs bg-yellow-100 text-yellow-800">
+                  Sebagian
+                </Badge>
+                <Badge variant="default" className="text-xs bg-green-100 text-green-800">
+                  Selesai
+                </Badge>
+              </div>
+
+              {/* Employee Table */}
+              <AssessmentTable
+                employees={filteredEmployees}
+                period={selectedPeriod}
+                loading={loading}
+                onAssessmentComplete={handleAssessmentComplete}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="reports">
+          <AssessmentReports availablePeriods={availablePeriods} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}

@@ -63,6 +63,11 @@ export const routeConfigs: RouteConfig[] = [
     allowedRoles: ['unit_manager'],
     description: 'KPI realization input'
   },
+  {
+    path: '/assessment',
+    allowedRoles: ['superadmin', 'unit_manager'],
+    description: 'KPI assessment and evaluation'
+  },
   
   // Shared routes
   {

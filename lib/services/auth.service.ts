@@ -28,7 +28,7 @@ export type UserRole = 'superadmin' | 'unit_manager' | 'employee'
 class AuthService {
   async signIn(email: string, password: string): Promise<LoginResult> {
     try {
-      const supabase = createClient()
+      const supabase = await createClient()
       
       console.log('[AUTH] Starting sign in for:', email)
       
@@ -134,7 +134,7 @@ class AuthService {
 
   async signOut(): Promise<void> {
     try {
-      const supabase = createClient()
+      const supabase = await createClient()
       
       console.log('[AUTH] Starting sign out...')
       
@@ -208,7 +208,7 @@ class AuthService {
 
   async getCurrentUser(): Promise<UserData | null> {
     try {
-      const supabase = createClient()
+      const supabase = await createClient()
       
       const { data: { session } } = await supabase.auth.getSession()
       
@@ -248,7 +248,7 @@ class AuthService {
 
   async isAuthenticated(): Promise<boolean> {
     try {
-      const supabase = createClient()
+      const supabase = await createClient()
       const { data: { session } } = await supabase.auth.getSession()
       return !!session
     } catch (error) {
@@ -259,7 +259,7 @@ class AuthService {
 
   async getUserRole(userId: string): Promise<UserRole | null> {
     try {
-      const supabase = createClient()
+      const supabase = await createClient()
       
       const { data: { user } } = await supabase.auth.getUser()
       
@@ -277,7 +277,7 @@ class AuthService {
 
   async getSession(): Promise<Session | null> {
     try {
-      const supabase = createClient()
+      const supabase = await createClient()
       const { data: { session } } = await supabase.auth.getSession()
       return session
     } catch (error) {
@@ -288,7 +288,7 @@ class AuthService {
 
   async getCurrentUserWithEmployee(): Promise<UserWithEmployee | null> {
     try {
-      const supabase = createClient()
+      const supabase = await createClient()
       
       const { data: { session } } = await supabase.auth.getSession()
       
@@ -333,7 +333,7 @@ class AuthService {
 
   async resetPassword(email: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const supabase = createClient()
+      const supabase = await createClient()
       
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
@@ -359,7 +359,7 @@ class AuthService {
 
   async updatePassword(newPassword: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const supabase = createClient()
+      const supabase = await createClient()
       
       const { error } = await supabase.auth.updateUser({
         password: newPassword,

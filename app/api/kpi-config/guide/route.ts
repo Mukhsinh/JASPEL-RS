@@ -190,27 +190,52 @@ export async function GET() {
     // 7. Formula
     doc.setFontSize(14)
     doc.setFont('helvetica', 'bold')
-    doc.text('7. FORMULA PERHITUNGAN', 20, yPos)
+    doc.text('7. FORMULA PERHITUNGAN LENGKAP', 20, yPos)
     yPos += 8
     doc.setFontSize(10)
     doc.setFont('helvetica', 'normal')
     
-    const formulas = [
-      'Skor Indikator = (Realisasi / Target) x 100',
+    const detailedFormulas = [
+      'STRUKTUR HIERARKI KPI:',
+      '1. Kategori (P1, P2, P3) - Total bobot = 100%',
+      '2. Indikator dalam setiap kategori - Total bobot = 100%',
+      '3. Sub Indikator dalam setiap indikator - Total bobot = 100%',
+      '4. Kriteria penilaian sub indikator (Skor 1-5)',
       '',
-      'Skor Kategori = Σ (Skor Indikator x Bobot Indikator)',
+      'LANGKAH PERHITUNGAN:',
+      '1. Nilai Sub Indikator = Skor berdasarkan kriteria (1-5)',
+      '2. Nilai Indikator = Σ (Nilai Sub Indikator × Bobot Sub Indikator)',
+      '3. Nilai Kategori = Σ (Nilai Indikator × Bobot Indikator)',
+      '4. Skor Total Pegawai = Σ (Nilai Kategori × Bobot Kategori)',
       '',
-      'Skor Total = Σ (Skor Kategori x Bobot Kategori)',
+      'DISTRIBUSI INSENTIF:',
+      '5. Proporsi Pegawai = Skor Pegawai / Total Skor Unit',
+      '6. Insentif Kotor = Pool Unit × Proporsi Pegawai',
+      '7. Pajak PPh 21 = Insentif Kotor × Tarif Pajak',
+      '8. Insentif Bersih = Insentif Kotor - Pajak PPh 21',
       '',
-      'Contoh:',
-      'P1 = 90 x 45% = 40.5',
-      'P2 = 85 x 35% = 29.75',
-      'P3 = 95 x 20% = 19',
-      'Total = 89.25'
+      'CONTOH DETAIL:',
+      'Pegawai A di Unit X dengan struktur:',
+      '- P1 (45%): Indikator 1 (60%) + Indikator 2 (40%)',
+      '- P2 (35%): Indikator 3 (100%)',
+      '- P3 (20%): Indikator 4 (100%)',
+      '',
+      'Perhitungan P1:',
+      '- Indikator 1: Sub A (30%,skor 4) + Sub B (70%,skor 5)',
+      '  = (4×30% + 5×70%) = 4.7',
+      '- Indikator 2: Sub C (100%,skor 3) = 3',
+      '- Nilai P1 = (4.7×60% + 3×40%) = 4.02',
+      '- Skor P1 = 4.02 × 45% = 1.809',
+      '',
+      'Total Skor = P1 + P2 + P3 = Skor Final Pegawai'
     ]
-    formulas.forEach(line => {
+    detailedFormulas.forEach(line => {
+      if (yPos > 270) {
+        doc.addPage()
+        yPos = 20
+      }
       doc.text(line, 20, yPos)
-      yPos += 5
+      yPos += 4
     })
 
     // Footer

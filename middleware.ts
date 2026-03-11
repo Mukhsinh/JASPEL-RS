@@ -273,6 +273,7 @@ export const config = {
     '/kpi-config/:path*',
     '/pool/:path*',
     '/realization/:path*',
+    '/assessment/:path*',
     '/reports/:path*',
     '/audit/:path*',
     '/settings/:path*',

@@ -20,6 +20,9 @@ export type Permission =
   | 'realization:read'
   | 'realization:create'
   | 'realization:update'
+  | 'assessment:read'
+  | 'assessment:create'
+  | 'assessment:update'
   | 'calculation:run'
   | 'calculation:view'
   | 'reports:view'
@@ -52,6 +55,9 @@ const rolePermissions: Record<Role, Permission[]> = {
     'realization:read',
     'realization:create',
     'realization:update',
+    'assessment:read',
+    'assessment:create',
+    'assessment:update',
     'calculation:run',
     'calculation:view',
     'reports:view',
@@ -66,6 +72,9 @@ const rolePermissions: Record<Role, Permission[]> = {
     'realization:read',
     'realization:create',
     'realization:update',
+    'assessment:read',
+    'assessment:create',
+    'assessment:update',
     'calculation:view',
     'reports:view',
     'reports:export',
@@ -142,6 +151,11 @@ export const routePermissions: RoutePermission[] = [
     path: '/realization',
     permissions: ['realization:read', 'realization:create'],
     roles: ['unit_manager'],
+  },
+  {
+    path: '/assessment',
+    permissions: ['assessment:read', 'assessment:create'],
+    roles: ['superadmin', 'unit_manager'],
   },
 
   // Shared routes
@@ -272,6 +286,12 @@ export function getMenuItemsForRole(role: Role): MenuItem[] {
       label: 'Input Realisasi',
       path: '/realization',
       icon: 'FileText',
+    },
+    {
+      id: 'assessment',
+      label: 'Penilaian KPI',
+      path: '/assessment',
+      icon: 'ClipboardCheck',
     },
     {
       id: 'reports',

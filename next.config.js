@@ -3,87 +3,47 @@ const nextConfig = {
   // Output configuration for Vercel
   output: 'standalone',
   
-  // Explicitly use App Router (Next.js 15)
+  // Basic experimental features
   experimental: {
     serverActions: {
       bodySizeLimit: '5mb',
     },
-    // Optimize page loading
-    optimizePackageImports: ['lucide-react', '@supabase/supabase-js'],
   },
   
-  // Image optimization
-  images: {
-    remotePatterns: [],
-    formats: ['image/avif', 'image/webp'],
-    deviceSizes: [640, 750, 828, 1080, 1200],
-  },
-  
-  // Compiler optimizations
-  compiler: {
-    removeConsole: process.env.NODE_ENV === 'production',
-  },
-  
-  // Enable React strict mode for better performance
+  // Enable React strict mode
   reactStrictMode: true,
   
-  // Skip ESLint during build for faster builds
+  // Skip ESLint during build
   eslint: {
     ignoreDuringBuilds: true,
   },
   
-  // Skip TypeScript errors during build (for faster iteration)
+  // TypeScript configuration
   typescript: {
     ignoreBuildErrors: false,
   },
   
-  // Optimize production builds
+  // Asset optimization
+  images: {
+    unoptimized: true,
+  },
+  
+  // Disable source maps in production to reduce bundle size
   productionBrowserSourceMaps: false,
   
-  // Compress responses
-  compress: true,
-  
-  // Ensure we're using App Router
-  pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
-  
-  // Webpack config
+  // Simple webpack config
   webpack: (config, { isServer }) => {
-    // Resolve fallback for server-side
+    // Only add essential fallbacks for client-side
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
         fs: false,
         net: false,
         tls: false,
-        crypto: false,
       }
     }
     
     return config
-  },
-  
-  // Headers for caching
-  async headers() {
-    return [
-      {
-        source: '/:all*(svg|jpg|jpeg|png|gif|ico|webp|avif)',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
-      {
-        source: '/_next/static/:path*',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
-    ]
   },
 }
 

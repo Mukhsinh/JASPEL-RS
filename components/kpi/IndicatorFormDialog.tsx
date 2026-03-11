@@ -84,6 +84,22 @@ export default function IndicatorFormDialog({
     setErrors({})
   }, [indicator, open])
 
+  function getTotalWeightInfo(): { total: number; isValid: boolean; message: string } {
+    const weight = parseFloat(formData.weight_percentage) || 0
+    const others = existingIndicators.filter(i => i.id !== indicator?.id)
+    const otherWeightsSum = others.reduce((sum, i) => sum + Number(i.weight_percentage), 0)
+    const totalWeight = otherWeightsSum + weight
+    const isValid = Math.abs(totalWeight - 100) < 0.01
+
+    return {
+      total: totalWeight,
+      isValid,
+      message: isValid
+        ? `Total bobot: ${totalWeight.toFixed(2)}% ✓`
+        : `Total bobot: ${totalWeight.toFixed(2)}% (harus 100%)`
+    }
+  }
+
   function validateForm(): boolean {
     const newErrors: Record<string, string> = {}
 
@@ -116,16 +132,16 @@ export default function IndicatorFormDialog({
       newErrors.weight_percentage = 'Persentase bobot wajib diisi'
     } else {
       const weight = parseFloat(formData.weight_percentage)
-      if (isNaN(weight) || weight < 0 || weight > 100) {
-        newErrors.weight_percentage = 'Bobot harus antara 0 dan 100'
+      if (isNaN(weight) || weight <= 0 || weight > 100) {
+        newErrors.weight_percentage = 'Bobot harus antara 0.01 dan 100'
       } else {
         // Check if total weight would exceed 100%
         const otherIndicators = existingIndicators.filter(i => i.id !== indicator?.id)
         const otherWeightsSum = otherIndicators.reduce((sum, i) => sum + Number(i.weight_percentage), 0)
         const totalWeight = otherWeightsSum + weight
 
-        if (Math.abs(totalWeight - 100) > 0.01) {
-          newErrors.weight_percentage = `Total bobot indikator harus sama dengan 100%. Total saat ini akan menjadi ${totalWeight.toFixed(2)}%`
+        if (totalWeight > 100.01) { // Allow small floating point tolerance
+          newErrors.weight_percentage = `Total bobot akan menjadi ${totalWeight.toFixed(2)}% (maksimal 100%)`
         }
       }
     }
@@ -262,6 +278,14 @@ export default function IndicatorFormDialog({
               {errors.weight_percentage && (
                 <p className="text-sm text-red-600">{errors.weight_percentage}</p>
               )}
+              {formData.weight_percentage && !errors.weight_percentage && (() => {
+                const weightInfo = getTotalWeightInfo()
+                return (
+                  <p className={`text-xs font-medium ${weightInfo.isValid ? 'text-green-600' : 'text-amber-600'}`}>
+                    {weightInfo.message}
+                  </p>
+                )
+              })()}
               <p className="text-xs text-gray-500">
                 Total semua bobot indikator dalam kategori ini harus sama dengan 100%
               </p>

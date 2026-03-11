@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { SettingsProvider } from "@/lib/contexts/settings-context";
-import { LayoutWrapper } from "@/components/layout/LayoutWrapper";
 import { AuthErrorHandler } from "@/components/AuthErrorHandler";
 import { Toaster } from 'sonner';
 
