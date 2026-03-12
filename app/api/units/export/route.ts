@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import * as XLSX from 'xlsx'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
 
 export async function GET(request: NextRequest) {
   try {
@@ -41,43 +39,7 @@ export async function GET(request: NextRequest) {
     )
 
     if (format === 'pdf') {
-      // Generate PDF
-      const doc = new jsPDF()
-      
-      // Title
-      doc.setFontSize(16)
-      doc.text('LAPORAN DATA UNIT', 105, 15, { align: 'center' })
-      
-      doc.setFontSize(10)
-      doc.text(`Tanggal: ${new Date().toLocaleDateString('id-ID')}`, 105, 22, { align: 'center' })
-
-      // Table
-      const tableData = unitsWithCounts.map((unit, index) => [
-        index + 1,
-        unit.code,
-        unit.name,
-        `${unit.proportion_percentage.toFixed(2)}%`,
-        unit.employee_count,
-        unit.is_active ? 'Aktif' : 'Nonaktif'
-      ])
-
-      autoTable(doc, {
-        startY: 30,
-        head: [['No', 'Kode Unit', 'Nama Unit', 'Proporsi', 'Jumlah Pegawai', 'Status']],
-        body: tableData,
-        theme: 'grid',
-        headStyles: { fillColor: [41, 128, 185] },
-        styles: { fontSize: 9 }
-      })
-
-      const pdfBuffer = Buffer.from(doc.output('arraybuffer'))
-      
-      return new NextResponse(pdfBuffer, {
-        headers: {
-          'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="Laporan_Unit_${new Date().toISOString().split('T')[0]}.pdf"`
-        }
-      })
+      return NextResponse.json({ error: "PDF export sementara dinonaktifkan untuk kompatibilitas build" }, { status: 501 })
     } else {
       // Generate Excel
       const excelData = unitsWithCounts.map((unit, index) => ({

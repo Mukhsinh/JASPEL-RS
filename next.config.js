@@ -7,8 +7,8 @@ const nextConfig = {
     },
   },
   
-  // Enable React strict mode
-  reactStrictMode: true,
+  // Disable React strict mode to prevent RSC payload conflicts
+  reactStrictMode: false,
   
   // Skip ESLint during build to avoid chunk conflicts
   eslint: {
@@ -25,22 +25,24 @@ const nextConfig = {
     unoptimized: true,
   },
   
-  // Enable source maps temporarily for debugging
+  // Disable source maps to prevent version conflicts
   productionBrowserSourceMaps: false,
   
-  // Simplified output configuration
-  output: 'standalone',
-  
   // Simplified webpack config to prevent chunk loading errors
-  webpack: (config, { isServer, dev }) => {
+  webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
         fs: false,
         net: false,
         tls: false,
+        canvas: false,
+        html2canvas: false,
+        dompurify: false,
+        canvg: false,
       }
     }
+    
     return config
   },
   

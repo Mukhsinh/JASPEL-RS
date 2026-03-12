@@ -67,20 +67,25 @@ export async function getNotifications(userId: string, supabaseClient?: any) {
 }
 
 export async function getUnreadCount(userId: string, supabaseClient?: any) {
-  const supabase = getSupabaseClient(supabaseClient)
+  try {
+    const supabase = getSupabaseClient(supabaseClient)
 
-  const { count, error } = await supabase
-    .from('t_notification')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('read', false)
+    const { count, error } = await supabase
+      .from('t_notification')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('read', false)
 
-  if (error) {
-    console.error('Failed to fetch unread count:', error)
+    if (error) {
+      console.error('Failed to fetch unread count:', error)
+      return { count: 0, error: error.message }
+    }
+
+    return { count: count || 0, error: null }
+  } catch (error: any) {
+    console.error('Exception in getUnreadCount:', error)
     return { count: 0, error: error.message }
   }
-
-  return { count: count || 0, error: null }
 }
 
 export async function markAsRead(notificationId: string, supabaseClient?: any) {

@@ -6,15 +6,16 @@ export async function GET() {
     // Generate the comprehensive system guide
     const pdfBuffer = await generateSystemGuide()
     
-    // Set response headers for PDF download
-    const headers = new Headers()
-    headers.set('Content-Type', 'application/pdf')
-    headers.set('Content-Disposition', `attachment; filename="Panduan_Sistem_JASPEL_${new Date().toISOString().split('T')[0]}.pdf"`)
-    headers.set('Content-Length', pdfBuffer.length.toString())
+    // Convert Buffer to Uint8Array for NextResponse
+    const uint8Array = new Uint8Array(pdfBuffer)
     
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(uint8Array, {
       status: 200,
-      headers
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="Panduan_Sistem_JASPEL_${new Date().toISOString().split('T')[0]}.pdf"`,
+        'Content-Length': pdfBuffer.length.toString()
+      }
     })
     
   } catch (error) {

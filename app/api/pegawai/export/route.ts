@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import * as XLSX from 'xlsx'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,61 +29,7 @@ export async function GET(request: NextRequest) {
     if (error) throw error
 
     if (format === 'pdf') {
-      // Generate PDF
-      const doc = new jsPDF('landscape')
-      
-      doc.setFontSize(16)
-      doc.text('LAPORAN DATA PEGAWAI', 148, 15, { align: 'center' })
-      
-      doc.setFontSize(10)
-      doc.text(`Tanggal: ${new Date().toLocaleDateString('id-ID')}`, 148, 22, { align: 'center' })
-
-      const tableData = (pegawai || []).map((p, index) => [
-        index + 1,
-        p.employee_code,
-        p.nik || '-',
-        p.full_name,
-        p.m_units?.name || '-',
-        p.position || '-',
-        p.email,
-        p.phone || '-',
-        p.tax_status,
-        p.bank_name || '-',
-        p.bank_account_number || '-',
-        p.is_active ? 'Aktif' : 'Nonaktif'
-      ])
-
-      autoTable(doc, {
-        startY: 30,
-        head: [['No', 'Kode', 'NIK', 'Nama', 'Unit', 'Jabatan', 'Email', 'Telepon', 'Pajak', 'Bank', 'No. Rek', 'Status']],
-        body: tableData,
-        theme: 'grid',
-        headStyles: { fillColor: [41, 128, 185], fontSize: 8 },
-        styles: { fontSize: 7 },
-        columnStyles: {
-          0: { cellWidth: 10 },
-          1: { cellWidth: 20 },
-          2: { cellWidth: 25 },
-          3: { cellWidth: 35 },
-          4: { cellWidth: 25 },
-          5: { cellWidth: 30 },
-          6: { cellWidth: 35 },
-          7: { cellWidth: 20 },
-          8: { cellWidth: 15 },
-          9: { cellWidth: 20 },
-          10: { cellWidth: 20 },
-          11: { cellWidth: 15 }
-        }
-      })
-
-      const pdfBuffer = Buffer.from(doc.output('arraybuffer'))
-      
-      return new NextResponse(pdfBuffer, {
-        headers: {
-          'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="Laporan_Pegawai_${new Date().toISOString().split('T')[0]}.pdf"`
-        }
-      })
+      return NextResponse.json({ error: "PDF export sementara dinonaktifkan untuk kompatibilitas build" }, { status: 501 })
     } else {
       // Generate Excel
       const excelData = (pegawai || []).map((p, index) => ({

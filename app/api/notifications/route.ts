@@ -5,35 +5,33 @@ import { createClient } from '@/lib/supabase/server'
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (authError || !user) {
+      return NextResponse.json({ count: 0, data: [] })
     }
 
     const searchParams = request.nextUrl.searchParams
     const unreadOnly = searchParams.get('unreadOnly') === 'true'
 
     if (unreadOnly) {
-      const { count, error } = await getUnreadCount(user.id, supabase)
-
-      if (error) {
+      try {
+        const { count, error } = await getUnreadCount(user.id, supabase)
+        return NextResponse.json({ count: error ? 0 : count })
+      } catch (error) {
         return NextResponse.json({ count: 0 })
       }
-
-      return NextResponse.json({ count })
     }
 
-    const { data, error } = await getNotifications(user.id, supabase)
-
-    if (error) {
-      return NextResponse.json({ error }, { status: 500 })
+    try {
+      const { data, error } = await getNotifications(user.id, supabase)
+      return NextResponse.json(error ? [] : data)
+    } catch (error) {
+      return NextResponse.json([])
     }
-
-    return NextResponse.json(data)
   } catch (error: any) {
-    // Return empty data instead of 500 to prevent sidebar errors
-    return NextResponse.json({ count: 0 })
+    // Always return safe fallback data
+    return NextResponse.json({ count: 0, data: [] })
   }
 }
 
