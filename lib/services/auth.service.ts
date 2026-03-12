@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Session } from '@supabase/supabase-js'
 import { handleAuthError, logAuthError } from '@/lib/utils/auth-errors'
 import type { UserWithEmployee, UserMetadata } from '@/lib/types/database.types'
+import { clearAllStorage } from '@/lib/utils/storage-adapter'
 
 export interface LoginCredentials {
   email: string
@@ -28,14 +29,36 @@ export type UserRole = 'superadmin' | 'unit_manager' | 'employee'
 class AuthService {
   async signIn(email: string, password: string): Promise<LoginResult> {
     try {
-      const supabase = await createClient()
+      // Skip if running on server
+      if (typeof window === 'undefined') {
+        return {
+          success: false,
+          error: 'Login hanya dapat dilakukan di browser',
+        }
+      }
+
+      const supabase = createClient()
       
       console.log('[AUTH] Starting sign in for:', email)
       
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      // Clear any existing session first
+      try {
+        await supabase.auth.signOut({ scope: 'local' })
+      } catch (clearError) {
+        console.warn('[AUTH] Error clearing session:', clearError)
+      }
+
+      // Add timeout to prevent hanging
+      const signInPromise = supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password: password,
       })
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Login timeout')), 10000)
+      )
+      
+      const { data: authData, error: authError } = await Promise.race([signInPromise, timeoutPromise]) as any
 
       if (authError || !authData.user) {
         console.error('[AUTH] Sign in failed:', authError)
@@ -48,10 +71,13 @@ class AuthService {
 
       console.log('[AUTH] Sign in successful, user ID:', authData.user.id)
 
-      const role = authData.user.user_metadata?.role as string
+      // Check both user_metadata and raw_user_meta_data for role
+      const role = (authData.user.user_metadata?.role || authData.user.raw_user_meta_data?.role) as string
       
       if (!role) {
         console.error('[AUTH] Role not found in metadata')
+        console.error('[AUTH] user_metadata:', authData.user.user_metadata)
+        console.error('[AUTH] raw_user_meta_data:', authData.user.raw_user_meta_data)
         logAuthError('user-fetch', new Error('Role not found in user metadata'))
         await supabase.auth.signOut()
         return {
@@ -63,14 +89,32 @@ class AuthService {
       console.log('[AUTH] User role:', role)
       console.log('[AUTH] Fetching employee data...')
 
-      const { data: employeeData, error: employeeError } = await supabase
-        .from('m_employees')
-        .select('id, full_name, unit_id, is_active')
-        .eq('user_id', authData.user.id)
-        .maybeSingle()
+      // Try to fetch employee data with retry logic
+      let employeeData = null
+      let employeeError = null
+      
+      for (let attempt = 0; attempt < 3; attempt++) {
+        // Use maybeSingle() to avoid PGRST116 error
+        const result = await supabase
+          .from('m_employees')
+          .select('id, full_name, unit_id, is_active')
+          .eq('user_id', authData.user.id)
+          .limit(1)
+          .maybeSingle()
+        
+        employeeData = result.data
+        employeeError = result.error
+        
+        if (employeeData) break
+        
+        if (attempt < 2) {
+          console.warn(`[AUTH] Employee fetch attempt ${attempt + 1} failed, retrying...`)
+          await new Promise(resolve => setTimeout(resolve, 300))
+        }
+      }
 
       if (employeeError) {
-        console.error('[AUTH] Employee fetch error:', employeeError)
+        console.error('[AUTH] Employee fetch error after retries:', employeeError)
         logAuthError('employee-fetch', employeeError)
         await supabase.auth.signOut()
         return {
@@ -120,6 +164,27 @@ class AuthService {
       }
     } catch (error) {
       console.error('[AUTH] Exception during sign in:', error)
+      
+      // Handle specific storage errors
+      if (error?.message?.includes('Cannot read properties of undefined') ||
+          error?.message?.includes('removeItem') ||
+          error?.message?.includes('getItem')) {
+        console.warn('[AUTH] Storage error detected, clearing and retrying...')
+        
+        // Clear storage and try to recover
+        try {
+          localStorage.clear()
+          sessionStorage.clear()
+        } catch (storageError) {
+          console.warn('[AUTH] Could not clear storage:', storageError)
+        }
+        
+        return {
+          success: false,
+          error: 'Terjadi masalah dengan penyimpanan browser. Silakan refresh halaman dan coba lagi.',
+        }
+      }
+      
       logAuthError('signIn-exception', error)
       return {
         success: false,
@@ -134,7 +199,7 @@ class AuthService {
 
   async signOut(): Promise<void> {
     try {
-      const supabase = await createClient()
+      const supabase = createClient()
       
       console.log('[AUTH] Starting sign out...')
       
@@ -146,13 +211,10 @@ class AuthService {
         logAuthError('signOut', error)
       }
       
-      // Clear all storage
+      // Clear all storage using safe adapter
       if (typeof window !== 'undefined') {
-        // Clear localStorage
-        localStorage.clear()
-        
-        // Clear sessionStorage
-        sessionStorage.clear()
+        // Use safe storage adapter
+        clearAllStorage()
         
         // Clear all Supabase-related cookies
         const cookiesToClear = [
@@ -188,8 +250,7 @@ class AuthService {
       
       // Still clear storage and redirect even if sign out fails
       if (typeof window !== 'undefined') {
-        localStorage.clear()
-        sessionStorage.clear()
+        clearAllStorage()
         
         // Clear cookies
         document.cookie.split(";").forEach((c) => {
@@ -208,7 +269,7 @@ class AuthService {
 
   async getCurrentUser(): Promise<UserData | null> {
     try {
-      const supabase = await createClient()
+      const supabase = createClient()
       
       const { data: { session } } = await supabase.auth.getSession()
       
@@ -248,7 +309,7 @@ class AuthService {
 
   async isAuthenticated(): Promise<boolean> {
     try {
-      const supabase = await createClient()
+      const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
       return !!session
     } catch (error) {
@@ -259,7 +320,7 @@ class AuthService {
 
   async getUserRole(userId: string): Promise<UserRole | null> {
     try {
-      const supabase = await createClient()
+      const supabase = createClient()
       
       const { data: { user } } = await supabase.auth.getUser()
       
@@ -277,7 +338,7 @@ class AuthService {
 
   async getSession(): Promise<Session | null> {
     try {
-      const supabase = await createClient()
+      const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
       return session
     } catch (error) {
@@ -288,7 +349,7 @@ class AuthService {
 
   async getCurrentUserWithEmployee(): Promise<UserWithEmployee | null> {
     try {
-      const supabase = await createClient()
+      const supabase = createClient()
       
       const { data: { session } } = await supabase.auth.getSession()
       
@@ -333,7 +394,7 @@ class AuthService {
 
   async resetPassword(email: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const supabase = await createClient()
+      const supabase = createClient()
       
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
@@ -359,7 +420,7 @@ class AuthService {
 
   async updatePassword(newPassword: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const supabase = await createClient()
+      const supabase = createClient()
       
       const { error } = await supabase.auth.updateUser({
         password: newPassword,

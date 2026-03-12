@@ -25,10 +25,10 @@ const nextConfig = {
     unoptimized: true,
   },
   
-  // Disable source maps in production only
+  // Enable source maps for development
   productionBrowserSourceMaps: false,
   
-  // Clean webpack configuration for static assets
+  // Clean webpack configuration
   webpack: (config, { dev, isServer }) => {
     // Only apply fallbacks for client-side builds
     if (!isServer) {
@@ -40,17 +40,11 @@ const nextConfig = {
       }
     }
     
-    // Optimize for development to prevent static asset issues
+    // Optimize for development
     if (dev) {
       config.watchOptions = {
         poll: 1000,
         aggregateTimeout: 300,
-      }
-      
-      // Ensure proper static file handling
-      config.output = {
-        ...config.output,
-        publicPath: '/_next/',
       }
     }
     
@@ -63,10 +57,7 @@ const nextConfig = {
   // Optimize for Vercel deployment
   poweredByHeader: false,
   
-  // Ensure proper static file serving
-  trailingSlash: false,
-  
-  // Redirect configuration
+  // Clean redirect configuration
   async redirects() {
     return [
       {
@@ -76,6 +67,12 @@ const nextConfig = {
       },
     ]
   },
+  
+  // Ensure proper static file serving
+  trailingSlash: false,
+  
+  // Output configuration for better compatibility
+  output: 'standalone',
 }
 
 module.exports = nextConfig

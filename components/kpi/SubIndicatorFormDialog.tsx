@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { createSubIndicator, updateSubIndicator } from '@/app/actions/sub-indicator-actions'
 import {
     Dialog,
     DialogContent,
@@ -142,6 +143,8 @@ export default function SubIndicatorFormDialog({
             const weight = parseFloat(formData.weight_percentage)
             if (isNaN(weight) || weight <= 0) {
                 newErrors.weight_percentage = 'Bobot harus lebih besar dari 0'
+            } else if (weight > 100) {
+                newErrors.weight_percentage = 'Bobot tidak boleh lebih dari 100%'
             } else {
                 // Validate total weight doesn't exceed 100%
                 const others = existingSubIndicators.filter(s => s.id !== subIndicator?.id)
@@ -193,44 +196,41 @@ export default function SubIndicatorFormDialog({
 
         try {
             const data = {
-                indicator_id: subIndicator?.indicator_id || indicator?.id,
+                indicator_id: subIndicator?.indicator_id || indicator?.id!,
                 name: formData.name.trim(),
-                description: formData.description.trim() || null,
+                description: formData.description.trim() || undefined,
                 weight_percentage: parseFloat(formData.weight_percentage),
                 target_value: formData.target_value ? parseFloat(formData.target_value) : 100,
-                measurement_unit: formData.measurement_unit.trim() || null,
-                scoring_criteria: JSON.stringify(formData.scoring_criteria),
-                is_active: true
+                measurement_unit: formData.measurement_unit.trim() || undefined,
+                scoring_criteria: formData.scoring_criteria
             }
 
+            let result
             if (subIndicator) {
-                const { error } = await supabase
-                    .from('m_kpi_sub_indicators')
-                    .update(data)
-                    .eq('id', subIndicator.id)
-
-                if (error) throw error
+                // Update existing sub indicator
+                result = await updateSubIndicator(subIndicator.id, data)
             } else {
-                // Generate code for new sub indicator
-                const existingCodes = existingSubIndicators.map(s => {
-                    const match = s.code.match(/(\d+)$/)
-                    return match ? parseInt(match[1]) : 0
-                })
-                const maxCode = existingCodes.length > 0 ? Math.max(...existingCodes) : 0
-                const newCode = `SUB${String(maxCode + 1).padStart(3, '0')}`
-
-                const { error } = await supabase
-                    .from('m_kpi_sub_indicators')
-                    .insert({ ...data, code: newCode })
-
-                if (error) throw error
+                // Create new sub indicator
+                result = await createSubIndicator(data)
             }
 
-            onSuccess()
-            onOpenChange(false)
+            if (result.success) {
+                onSuccess()
+                onOpenChange(false)
+            } else {
+                throw new Error(result.error)
+            }
         } catch (error: any) {
             console.error('Error saving sub indicator:', error)
-            alert(error.message || 'Gagal menyimpan sub indikator')
+            
+            // Show user-friendly error message
+            let errorMessage = 'Gagal menyimpan sub indikator'
+            
+            if (error.message) {
+                errorMessage = error.message
+            }
+            
+            alert(errorMessage)
         } finally {
             setIsSubmitting(false)
         }
@@ -284,7 +284,7 @@ export default function SubIndicatorFormDialog({
                                     )
                                 })()}
                                 <p className="text-xs text-gray-500">
-                                    Total semua bobot sub indikator dalam indikator ini harus sama dengan 100%. Bobot individual bisa kurang dari 100%.
+                                    Total semua bobot sub indikator dalam indikator ini harus sama dengan 100%. Bobot individual dapat diisi kurang dari 100%.
                                 </p>
                             </div>
                             <div className="space-y-2">

@@ -79,13 +79,12 @@ export async function middleware(request: NextRequest) {
       const newPath = getLegacyRedirectPath(pathname)
       if (newPath) {
         const url = new URL(newPath, request.url)
-        // Preserve query params
         url.search = request.nextUrl.search
-        return NextResponse.redirect(url, 301) // Permanent redirect
+        return NextResponse.redirect(url, 301)
       }
     }
 
-    // 3. Create Supabase client
+    // 3. Create Supabase client with proper cookie handling
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -95,38 +94,12 @@ export async function middleware(request: NextRequest) {
             return request.cookies.get(name)?.value
           },
           set(name: string, value: string, options: any) {
-            request.cookies.set({
-              name,
-              value,
-              ...options,
-            })
-            response = NextResponse.next({
-              request: {
-                headers: request.headers,
-              },
-            })
-            response.cookies.set({
-              name,
-              value,
-              ...options,
-            })
+            request.cookies.set({ name, value, ...options })
+            response.cookies.set({ name, value, ...options })
           },
           remove(name: string, options: any) {
-            request.cookies.set({
-              name,
-              value: '',
-              ...options,
-            })
-            response = NextResponse.next({
-              request: {
-                headers: request.headers,
-              },
-            })
-            response.cookies.set({
-              name,
-              value: '',
-              ...options,
-            })
+            request.cookies.set({ name, value: '', ...options })
+            response.cookies.set({ name, value: '', ...options })
           },
         },
       }
@@ -137,21 +110,12 @@ export async function middleware(request: NextRequest) {
     
     if (!session || sessionError) {
       const loginUrl = new URL('/login', request.url)
-      
-      // Clear all auth cookies on redirect
-      const cookiesToClear = [
-        'sb-access-token',
-        'sb-refresh-token',
-        'supabase-auth-token',
-        'sb-auth-token'
-      ]
-      
       const redirectResponse = NextResponse.redirect(loginUrl)
+      
+      // Clear auth cookies
+      const cookiesToClear = ['sb-access-token', 'sb-refresh-token', 'supabase-auth-token', 'sb-auth-token']
       cookiesToClear.forEach(cookieName => {
-        redirectResponse.cookies.set(cookieName, '', {
-          maxAge: 0,
-          path: '/',
-        })
+        redirectResponse.cookies.set(cookieName, '', { maxAge: 0, path: '/' })
       })
       
       return redirectResponse
@@ -165,7 +129,7 @@ export async function middleware(request: NextRequest) {
       const role = session.user.user_metadata?.role as Role
       
       if (!role) {
-        console.error('Role not found in user_metadata')
+        console.error('[MIDDLEWARE] Role not found in user_metadata for user:', session.user.email)
         const loginUrl = new URL('/login', request.url)
         loginUrl.searchParams.set('error', 'user_not_found')
         
@@ -183,23 +147,11 @@ export async function middleware(request: NextRequest) {
         .from('m_employees')
         .select('is_active')
         .eq('user_id', session.user.id)
+        .limit(1)
         .maybeSingle()
       
-      if (employeeError) {
-        console.error('Employee fetch error:', employeeError)
-        const loginUrl = new URL('/login', request.url)
-        loginUrl.searchParams.set('error', 'user_not_found')
-        
-        const redirectResponse = NextResponse.redirect(loginUrl)
-        const cookiesToClear = ['sb-access-token', 'sb-refresh-token', 'supabase-auth-token', 'sb-auth-token']
-        cookiesToClear.forEach(cookieName => {
-          redirectResponse.cookies.set(cookieName, '', { maxAge: 0, path: '/' })
-        })
-        
-        return redirectResponse
-      }
-      
-      if (!employee) {
+      if (employeeError || !employee) {
+        console.error('[MIDDLEWARE] Employee fetch error for:', session.user.email)
         const loginUrl = new URL('/login', request.url)
         loginUrl.searchParams.set('error', 'user_not_found')
         

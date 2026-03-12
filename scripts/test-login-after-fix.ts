@@ -1,111 +1,56 @@
-import { createClient } from '@supabase/supabase-js'
-import * as dotenv from 'dotenv'
+#!/usr/bin/env tsx
 
-dotenv.config({ path: '.env.local' })
+/**
+ * Test login setelah perbaikan error
+ */
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+import { config } from 'dotenv'
+import { resolve } from 'path'
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Load environment variables
+config({ path: resolve(process.cwd(), '.env.local') })
 
 async function testLogin() {
-  console.log('='.repeat(60))
-  console.log('TESTING LOGIN AFTER FIX')
-  console.log('='.repeat(60))
-  console.log()
-
-  // Test login
-  console.log('1. Attempting login with mukhsin9@gmail.com...')
-  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email: 'mukhsin9@gmail.com',
-    password: 'admin123'
-  })
-
-  if (authError) {
-    console.log('❌ Login failed:', authError.message)
-    return
-  }
-
-  console.log('✅ Login successful!')
-  console.log(`   User ID: ${authData.user.id}`)
-  console.log(`   Email: ${authData.user.email}`)
-  console.log(`   Role (metadata): ${authData.user.user_metadata?.role}`)
-  console.log()
-
-  // Fetch employee data
-  console.log('2. Fetching employee data...')
-  const { data: employeeData, error: employeeError } = await supabase
-    .from('m_employees')
-    .select('id, full_name, unit_id, is_active, role')
-    .eq('user_id', authData.user.id)
-    .maybeSingle()
-
-  if (employeeError) {
-    console.log('❌ Error fetching employee:', employeeError.message)
-    await supabase.auth.signOut()
-    return
-  }
-
-  if (!employeeData) {
-    console.log('❌ Employee record not found')
-    await supabase.auth.signOut()
-    return
-  }
-
-  console.log('✅ Employee data found:')
-  console.log(`   Name: ${employeeData.full_name}`)
-  console.log(`   Role: ${employeeData.role}`)
-  console.log(`   Active: ${employeeData.is_active}`)
-  console.log(`   Unit ID: ${employeeData.unit_id || 'None'}`)
-  console.log()
-
-  // Check if active
-  if (!employeeData.is_active) {
-    console.log('❌ Employee is not active')
-    await supabase.auth.signOut()
-    return
-  }
-
-  console.log('3. Checking route authorization...')
-  const role = employeeData.role
-  const testRoutes = [
-    '/dashboard',
-    '/units',
-    '/users',
-    '/pegawai',
-    '/kpi-config',
-    '/pool',
-    '/realization',
-    '/reports',
-    '/audit',
-    '/settings'
-  ]
-
-  console.log(`   User role: ${role}`)
-  console.log(`   Testing access to routes:`)
+  console.log('🧪 Testing login setelah perbaikan...')
   
-  testRoutes.forEach(route => {
-    // Superadmin has access to all routes
-    const hasAccess = role === 'superadmin'
-    console.log(`   ${hasAccess ? '✅' : '❌'} ${route}`)
-  })
-  console.log()
+  try {
+    // Test dengan fetch ke API login
+    const response = await fetch('http://localhost:3002/login', {
+      method: 'GET',
+      headers: {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    })
 
-  // Sign out
-  console.log('4. Signing out...')
-  await supabase.auth.signOut()
-  console.log('✅ Signed out successfully')
-  console.log()
+    console.log('📊 Status response:', response.status)
+    console.log('📋 Headers:', Object.fromEntries(response.headers.entries()))
 
-  console.log('='.repeat(60))
-  console.log('TEST COMPLETE - LOGIN SHOULD NOW WORK!')
-  console.log('='.repeat(60))
-  console.log()
-  console.log('Next steps:')
-  console.log('1. Start the dev server: npm run dev')
-  console.log('2. Open http://localhost:3002/login')
-  console.log('3. Login with: mukhsin9@gmail.com / admin123')
-  console.log('4. You should be redirected to /dashboard')
+    if (response.ok) {
+      console.log('✅ Halaman login dapat diakses')
+      
+      // Test environment variables
+      console.log('\n🔧 Environment Variables:')
+      console.log('SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? '✅ Set' : '❌ Missing')
+      console.log('SUPABASE_ANON_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? '✅ Set' : '❌ Missing')
+      console.log('SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? '✅ Set' : '❌ Missing')
+      
+    } else {
+      console.log('❌ Error mengakses halaman login:', response.statusText)
+    }
+
+    // Test static assets
+    console.log('\n🎨 Testing static assets...')
+    
+    const faviconResponse = await fetch('http://localhost:3002/favicon.ico')
+    console.log('Favicon:', faviconResponse.status === 200 ? '✅' : '❌')
+    
+    const nextResponse = await fetch('http://localhost:3002/_next/static/css/app/layout.css')
+    console.log('CSS Assets:', nextResponse.status === 200 ? '✅' : '❌ (Normal jika tidak ada)')
+
+  } catch (error) {
+    console.error('💥 Error dalam test:', error)
+  }
 }
 
 testLogin().catch(console.error)

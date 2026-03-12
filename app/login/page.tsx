@@ -51,20 +51,30 @@ export default function LoginPage() {
     setError(null)
 
     try {
+      console.log('[LOGIN] Starting login process...')
       const result = await authService.login({ email, password })
 
+      console.log('[LOGIN] Login result:', { success: result.success, hasUser: !!result.user })
+
       if (result.success && result.user) {
-        // Wait for session to be fully established
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        console.log('[LOGIN] Login successful, redirecting to dashboard...')
         
-        // Use hard navigation for reliable redirect to unified dashboard
-        window.location.href = getDashboardRoute()
+        // Small delay to ensure cookies are set
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+        // Use hard navigation for reliable redirect
+        const dashboardUrl = getDashboardRoute()
+        console.log('[LOGIN] Redirecting to:', dashboardUrl)
+        
+        // Force hard redirect with replace to prevent back button issues
+        window.location.replace(dashboardUrl)
       } else {
+        console.error('[LOGIN] Login failed:', result.error)
         setError(result.error || 'Email atau kata sandi salah')
         setIsLoading(false)
       }
     } catch (err) {
-      console.error('Login error:', err)
+      console.error('[LOGIN] Exception during login:', err)
       setError('Terjadi kesalahan, silakan coba lagi')
       setIsLoading(false)
     }

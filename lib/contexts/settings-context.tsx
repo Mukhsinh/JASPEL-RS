@@ -100,8 +100,21 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const checkAuthAndLoad = async () => {
       try {
+        // Skip if running on server
+        if (typeof window === 'undefined') {
+          setLoading(false)
+          return
+        }
+
         const supabase = createClient()
-        const { data: { session } } = await supabase.auth.getSession()
+        
+        // Add timeout to prevent hanging
+        const sessionPromise = supabase.auth.getSession()
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Session timeout')), 5000)
+        )
+        
+        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any
 
         // Only load settings if user is authenticated
         if (session) {
@@ -110,10 +123,13 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           setLoading(false)
         }
       } catch (err: any) {
-        // Silently handle lock errors
-        if (err?.name === 'AbortError' || err?.message?.includes('Lock broken')) {
-          console.warn('[Settings] Auth lock contention, retrying in 1s...')
-          setTimeout(() => checkAuthAndLoad(), 1000)
+        // Silently handle various auth errors
+        if (err?.name === 'AbortError' || 
+            err?.message?.includes('Lock broken') ||
+            err?.message?.includes('Session timeout') ||
+            err?.message?.includes('Cannot read properties of undefined')) {
+          console.warn('[Settings] Auth error, retrying in 2s...', err.message)
+          setTimeout(() => checkAuthAndLoad(), 2000)
           return
         }
         console.warn('Settings context init error:', err)
@@ -121,10 +137,10 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Small delay to prevent hydration issues
+    // Delay to prevent hydration issues and allow storage to initialize
     const timer = setTimeout(() => {
       checkAuthAndLoad()
-    }, 0)
+    }, 100)
 
     return () => clearTimeout(timer)
   }, [loadSettings])
@@ -135,7 +151,16 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
     const setupSubscription = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
+        // Skip if running on server
+        if (typeof window === 'undefined') return
+
+        // Add timeout for session check
+        const sessionPromise = supabase.auth.getSession()
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Session timeout')), 3000)
+        )
+        
+        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any
 
         // Only subscribe if user is authenticated
         if (!session) return
@@ -161,6 +186,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           supabase.removeChannel(channel)
         }
       } catch (err) {
+        // Silently handle subscription errors
+        if (err?.message?.includes('Session timeout') || 
+            err?.message?.includes('Cannot read properties of undefined')) {
+          console.warn('[Settings] Subscription setup failed, continuing without realtime updates')
+          return
+        }
         console.warn('Settings subscription error:', err)
       }
     }

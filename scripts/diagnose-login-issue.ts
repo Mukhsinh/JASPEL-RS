@@ -1,127 +1,158 @@
 import { createClient } from '@supabase/supabase-js'
 import * as dotenv from 'dotenv'
+import * as path from 'path'
 
-dotenv.config({ path: '.env.local' })
+// Load environment variables
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-})
-
-async function diagnoseLoginIssue() {
+async function diagnoseLogin() {
   console.log('🔍 Diagnosing Login Issue...\n')
-  
-  const testEmail = 'mukhsin9@gmail.com'
-  
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+  // Test credentials
+  const email = 'mukhsin9@gmail.com'
+  const password = 'admin123'
+
+  console.log('📧 Testing login with:', email)
+  console.log('🔑 Password length:', password.length)
+  console.log('')
+
   try {
-    // 1. Check if user exists in auth.users
-    console.log('1️⃣ Checking auth.users table...')
-    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers()
-    
-    if (authError) {
-      console.error('❌ Error fetching auth users:', authError)
-      return
-    }
-    
-    const authUser = authUsers.users.find(u => u.email === testEmail)
-    
-    if (!authUser) {
-      console.log(`❌ User ${testEmail} NOT FOUND in auth.users`)
-      console.log('\n📋 Available users in auth.users:')
-      authUsers.users.forEach(u => {
-        console.log(`   - ${u.email} (ID: ${u.id})`)
-      })
-      return
-    }
-    
-    console.log(`✅ User found in auth.users`)
-    console.log(`   - ID: ${authUser.id}`)
-    console.log(`   - Email: ${authUser.email}`)
-    console.log(`   - Email Confirmed: ${authUser.email_confirmed_at ? 'Yes' : 'No'}`)
-    console.log(`   - Metadata:`, JSON.stringify(authUser.user_metadata, null, 2))
-    
-    // 2. Check if employee record exists
-    console.log('\n2️⃣ Checking m_employees table...')
-    const { data: employee, error: employeeError } = await supabase
-      .from('m_employees')
-      .select('*')
-      .eq('user_id', authUser.id)
-      .maybeSingle()
-    
-    if (employeeError) {
-      console.error('❌ Error fetching employee:', employeeError)
-      return
-    }
-    
-    if (!employee) {
-      console.log(`❌ Employee record NOT FOUND for user_id: ${authUser.id}`)
-      
-      // Check if there are any employees
-      const { data: allEmployees, error: allError } = await supabase
-        .from('m_employees')
-        .select('id, user_id, full_name, email')
-        .limit(10)
-      
-      if (!allError && allEmployees) {
-        console.log('\n📋 Sample employees in m_employees:')
-        allEmployees.forEach(e => {
-          console.log(`   - ${e.full_name} (${e.email}) - user_id: ${e.user_id || 'NULL'}`)
-        })
-      }
-      return
-    }
-    
-    console.log(`✅ Employee record found`)
-    console.log(`   - ID: ${employee.id}`)
-    console.log(`   - Full Name: ${employee.full_name}`)
-    console.log(`   - Email: ${employee.email}`)
-    console.log(`   - Role: ${employee.role}`)
-    console.log(`   - Unit ID: ${employee.unit_id}`)
-    console.log(`   - Is Active: ${employee.is_active}`)
-    console.log(`   - User ID: ${employee.user_id}`)
-    
-    // 3. Test login
-    console.log('\n3️⃣ Testing login with password...')
-    const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
-      email: testEmail,
-      password: 'admin123'
+    // Step 1: Test authentication
+    console.log('Step 1: Testing authentication...')
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password: password,
     })
-    
-    if (loginError) {
-      console.error('❌ Login failed:', loginError.message)
+
+    if (authError) {
+      console.error('❌ Authentication failed:', authError.message)
+      console.error('Error details:', authError)
       return
     }
-    
-    console.log('✅ Login successful!')
-    console.log(`   - Session: ${loginData.session ? 'Created' : 'Not created'}`)
-    console.log(`   - User ID: ${loginData.user?.id}`)
-    
-    // 4. Check RLS policies
-    console.log('\n4️⃣ Checking RLS policies on m_employees...')
-    const { data: policies, error: policyError } = await supabase
-      .rpc('get_table_policies', { table_name: 'm_employees' })
-      .maybeSingle()
-    
-    if (policyError) {
-      console.log('⚠️  Could not fetch RLS policies (this is OK)')
-    } else {
-      console.log('✅ RLS policies exist')
+
+    if (!authData.user) {
+      console.error('❌ No user data returned')
+      return
     }
+
+    console.log('✅ Authentication successful')
+    console.log('   User ID:', authData.user.id)
+    console.log('   Email:', authData.user.email)
+    console.log('   User metadata:', JSON.stringify(authData.user.user_metadata, null, 2))
+    console.log('')
+
+    // Step 2: Check session
+    console.log('Step 2: Checking session...')
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+
+    if (sessionError) {
+      console.error('❌ Session error:', sessionError.message)
+      return
+    }
+
+    if (!sessionData.session) {
+      console.error('❌ No session found')
+      return
+    }
+
+    console.log('✅ Session valid')
+    console.log('   Access token length:', sessionData.session.access_token.length)
+    console.log('   Expires at:', new Date(sessionData.session.expires_at! * 1000).toISOString())
+    console.log('')
+
+    // Step 3: Fetch employee data
+    console.log('Step 3: Fetching employee data...')
+    const { data: employeeData, error: employeeError } = await supabase
+      .from('m_employees')
+      .select('id, employee_code, full_name, unit_id, is_active')
+      .eq('user_id', authData.user.id)
+      .maybeSingle()
+
+    if (employeeError) {
+      console.error('❌ Employee fetch error:', employeeError.message)
+      console.error('Error details:', employeeError)
+      return
+    }
+
+    if (!employeeData) {
+      console.error('❌ No employee data found')
+      return
+    }
+
+    console.log('✅ Employee data found')
+    console.log('   Employee ID:', employeeData.id)
+    console.log('   Employee Code:', employeeData.employee_code)
+    console.log('   Full Name:', employeeData.full_name)
+    console.log('   Unit ID:', employeeData.unit_id)
+    console.log('   Is Active:', employeeData.is_active)
+    console.log('')
+
+    // Step 4: Check role from metadata
+    console.log('Step 4: Checking role...')
+    const role = authData.user.user_metadata?.role
+
+    if (!role) {
+      console.error('❌ Role not found in user metadata')
+      return
+    }
+
+    console.log('✅ Role found:', role)
+    console.log('')
+
+    // Step 5: Test RLS policies
+    console.log('Step 5: Testing RLS policies...')
     
-    console.log('\n✅ DIAGNOSIS COMPLETE')
-    console.log('\n📊 Summary:')
-    console.log(`   - Auth User: ${authUser ? '✅' : '❌'}`)
-    console.log(`   - Employee Record: ${employee ? '✅' : '❌'}`)
-    console.log(`   - Login Test: ${loginData ? '✅' : '❌'}`)
-    
+    // Test units access
+    const { data: unitsData, error: unitsError } = await supabase
+      .from('m_units')
+      .select('id, unit_name')
+      .limit(1)
+
+    if (unitsError) {
+      console.error('❌ Units access error:', unitsError.message)
+    } else {
+      console.log('✅ Units access OK (found', unitsData?.length || 0, 'records)')
+    }
+
+    // Test employees access
+    const { data: employeesData, error: employeesError } = await supabase
+      .from('m_employees')
+      .select('id, full_name')
+      .limit(1)
+
+    if (employeesError) {
+      console.error('❌ Employees access error:', employeesError.message)
+    } else {
+      console.log('✅ Employees access OK (found', employeesData?.length || 0, 'records)')
+    }
+
+    console.log('')
+
+    // Step 6: Summary
+    console.log('📊 Summary:')
+    console.log('   ✅ Authentication: SUCCESS')
+    console.log('   ✅ Session: VALID')
+    console.log('   ✅ Employee Data: FOUND')
+    console.log('   ✅ Role: ' + role)
+    console.log('   ✅ Active Status:', employeeData.is_active)
+    console.log('')
+    console.log('🎉 Login should work! If it doesn\'t work in browser:')
+    console.log('   1. Clear browser cache and cookies')
+    console.log('   2. Try incognito/private mode')
+    console.log('   3. Check browser console for errors')
+    console.log('   4. Check Network tab for failed requests')
+
+    // Clean up
+    await supabase.auth.signOut()
+
   } catch (error) {
     console.error('❌ Unexpected error:', error)
   }
 }
 
-diagnoseLoginIssue()
+diagnoseLogin()
