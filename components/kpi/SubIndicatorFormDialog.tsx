@@ -14,7 +14,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import type { KPIIndicator, KPISubIndicator } from '@/lib/types/kpi.types'
+import { Plus, Trash2 } from 'lucide-react'
+import type { KPIIndicator, KPISubIndicator, ScoringCriterion } from '@/lib/types/kpi.types'
 
 interface SubIndicatorFormDialogProps {
     open: boolean
@@ -41,16 +42,13 @@ export default function SubIndicatorFormDialog({
         weight_percentage: '',
         target_value: '',
         measurement_unit: '',
-        score_1: '20',
-        score_2: '40', 
-        score_3: '60',
-        score_4: '80',
-        score_5: '100',
-        score_1_label: 'Sangat Kurang',
-        score_2_label: 'Kurang',
-        score_3_label: 'Cukup',
-        score_4_label: 'Baik',
-        score_5_label: 'Sangat Baik'
+        scoring_criteria: [
+            { score: 20, label: 'Sangat Kurang' },
+            { score: 40, label: 'Kurang' },
+            { score: 60, label: 'Cukup' },
+            { score: 80, label: 'Baik' },
+            { score: 100, label: 'Sangat Baik' }
+        ] as ScoringCriterion[]
     })
     const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -62,16 +60,13 @@ export default function SubIndicatorFormDialog({
                 weight_percentage: subIndicator.weight_percentage.toString(),
                 target_value: subIndicator.target_value?.toString() || '',
                 measurement_unit: subIndicator.measurement_unit || '',
-                score_1: subIndicator.score_1.toString(),
-                score_2: subIndicator.score_2.toString(),
-                score_3: subIndicator.score_3.toString(),
-                score_4: subIndicator.score_4.toString(),
-                score_5: subIndicator.score_5.toString(),
-                score_1_label: subIndicator.score_1_label,
-                score_2_label: subIndicator.score_2_label,
-                score_3_label: subIndicator.score_3_label,
-                score_4_label: subIndicator.score_4_label,
-                score_5_label: subIndicator.score_5_label
+                scoring_criteria: subIndicator.scoring_criteria || [
+                    { score: 20, label: 'Sangat Kurang' },
+                    { score: 40, label: 'Kurang' },
+                    { score: 60, label: 'Cukup' },
+                    { score: 80, label: 'Baik' },
+                    { score: 100, label: 'Sangat Baik' }
+                ]
             })
         } else {
             setFormData({
@@ -80,16 +75,13 @@ export default function SubIndicatorFormDialog({
                 weight_percentage: '',
                 target_value: '',
                 measurement_unit: '',
-                score_1: '20',
-                score_2: '40', 
-                score_3: '60',
-                score_4: '80',
-                score_5: '100',
-                score_1_label: 'Sangat Kurang',
-                score_2_label: 'Kurang',
-                score_3_label: 'Cukup',
-                score_4_label: 'Baik',
-                score_5_label: 'Sangat Baik'
+                scoring_criteria: [
+                    { score: 20, label: 'Sangat Kurang' },
+                    { score: 40, label: 'Kurang' },
+                    { score: 60, label: 'Cukup' },
+                    { score: 80, label: 'Baik' },
+                    { score: 100, label: 'Sangat Baik' }
+                ]
             })
         }
         setErrors({})
@@ -109,6 +101,32 @@ export default function SubIndicatorFormDialog({
                 ? `Total bobot: ${totalWeight.toFixed(2)}% ✓`
                 : `Total bobot: ${totalWeight.toFixed(2)}% (target 100%)`
         }
+    }
+
+    function addScoringCriterion() {
+        const newCriteria = [...formData.scoring_criteria]
+        const lastScore = newCriteria.length > 0 ? newCriteria[newCriteria.length - 1].score : 0
+        newCriteria.push({
+            score: lastScore + 20,
+            label: `Kriteria ${newCriteria.length + 1}`
+        })
+        setFormData({ ...formData, scoring_criteria: newCriteria })
+    }
+
+    function removeScoringCriterion(index: number) {
+        if (formData.scoring_criteria.length <= 1) return // Keep at least one criterion
+        const newCriteria = formData.scoring_criteria.filter((_, i) => i !== index)
+        setFormData({ ...formData, scoring_criteria: newCriteria })
+    }
+
+    function updateScoringCriterion(index: number, field: 'score' | 'label', value: string | number) {
+        const newCriteria = [...formData.scoring_criteria]
+        if (field === 'score') {
+            newCriteria[index].score = typeof value === 'string' ? parseFloat(value) || 0 : value
+        } else {
+            newCriteria[index].label = value.toString()
+        }
+        setFormData({ ...formData, scoring_criteria: newCriteria })
     }
 
     function validateForm(): boolean {
@@ -140,6 +158,27 @@ export default function SubIndicatorFormDialog({
             newErrors.target_value = 'Nilai target harus berupa angka'
         }
 
+        // Validate scoring criteria
+        if (formData.scoring_criteria.length === 0) {
+            newErrors.scoring_criteria = 'Minimal harus ada satu kriteria penilaian'
+        } else {
+            formData.scoring_criteria.forEach((criterion, index) => {
+                if (isNaN(criterion.score) || criterion.score < 0) {
+                    newErrors[`score_${index}`] = `Skor kriteria ${index + 1} harus berupa angka positif`
+                }
+                if (!criterion.label.trim()) {
+                    newErrors[`label_${index}`] = `Label kriteria ${index + 1} wajib diisi`
+                }
+            })
+
+            // Check for duplicate scores
+            const scores = formData.scoring_criteria.map(c => c.score)
+            const duplicateScores = scores.filter((score, index) => scores.indexOf(score) !== index)
+            if (duplicateScores.length > 0) {
+                newErrors.scoring_criteria = 'Skor kriteria tidak boleh sama'
+            }
+        }
+
         setErrors(newErrors)
         return Object.keys(newErrors).length === 0
     }
@@ -160,16 +199,7 @@ export default function SubIndicatorFormDialog({
                 weight_percentage: parseFloat(formData.weight_percentage),
                 target_value: formData.target_value ? parseFloat(formData.target_value) : 100,
                 measurement_unit: formData.measurement_unit.trim() || null,
-                score_1: parseFloat(formData.score_1),
-                score_2: parseFloat(formData.score_2),
-                score_3: parseFloat(formData.score_3),
-                score_4: parseFloat(formData.score_4),
-                score_5: parseFloat(formData.score_5),
-                score_1_label: formData.score_1_label,
-                score_2_label: formData.score_2_label,
-                score_3_label: formData.score_3_label,
-                score_4_label: formData.score_4_label,
-                score_5_label: formData.score_5_label,
+                scoring_criteria: JSON.stringify(formData.scoring_criteria),
                 is_active: true
             }
 
@@ -208,7 +238,7 @@ export default function SubIndicatorFormDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
                         <DialogTitle>{subIndicator ? 'Ubah Sub Indikator' : 'Tambah Sub Indikator'}</DialogTitle>
@@ -290,6 +320,88 @@ export default function SubIndicatorFormDialog({
                                 placeholder="Deskripsi opsional"
                                 rows={3}
                             />
+                        </div>
+
+                        {/* Kriteria Pengukuran - Dynamic */}
+                        <div className="space-y-4">
+                            <div className="border-t pt-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <Label className="text-base font-semibold">Kriteria Pengukuran Nilai/Skor</Label>
+                                        <p className="text-sm text-gray-600 mt-1">
+                                            Tentukan kriteria penilaian untuk setiap level skor. Anda dapat menambah atau mengurangi kriteria sesuai kebutuhan.
+                                        </p>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={addScoringCriterion}
+                                        className="flex items-center gap-2"
+                                    >
+                                        <Plus className="h-4 w-4" />
+                                        Tambah Kriteria
+                                    </Button>
+                                </div>
+                                {errors.scoring_criteria && <p className="text-sm text-red-600 mt-2">{errors.scoring_criteria}</p>}
+                            </div>
+
+                            <div className="space-y-3">
+                                {formData.scoring_criteria.map((criterion, index) => (
+                                    <div key={index} className="grid grid-cols-12 gap-2 items-start p-3 border rounded-lg">
+                                        <div className="col-span-2 space-y-1">
+                                            <Label htmlFor={`score_${index}`} className="text-sm">
+                                                Skor {index + 1}
+                                            </Label>
+                                            <Input
+                                                id={`score_${index}`}
+                                                type="number"
+                                                step="0.01"
+                                                value={criterion.score}
+                                                onChange={(e) => updateScoringCriterion(index, 'score', e.target.value)}
+                                                placeholder="0"
+                                            />
+                                            {errors[`score_${index}`] && (
+                                                <p className="text-xs text-red-600">{errors[`score_${index}`]}</p>
+                                            )}
+                                        </div>
+                                        <div className="col-span-8 space-y-1">
+                                            <Label htmlFor={`label_${index}`} className="text-sm">
+                                                Label/Kriteria
+                                            </Label>
+                                            <Input
+                                                id={`label_${index}`}
+                                                value={criterion.label}
+                                                onChange={(e) => updateScoringCriterion(index, 'label', e.target.value)}
+                                                placeholder="Deskripsi kriteria"
+                                            />
+                                            {errors[`label_${index}`] && (
+                                                <p className="text-xs text-red-600">{errors[`label_${index}`]}</p>
+                                            )}
+                                        </div>
+                                        <div className="col-span-2 flex items-end">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => removeScoringCriterion(index)}
+                                                disabled={formData.scoring_criteria.length <= 1}
+                                                className="w-full"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="bg-blue-50 p-3 rounded-md">
+                                <p className="text-sm text-blue-800">
+                                    <strong>Petunjuk:</strong> Skor menunjukkan nilai yang akan diberikan untuk setiap level pencapaian. 
+                                    Label/Kriteria menjelaskan kondisi atau pencapaian yang diperlukan untuk mendapat skor tersebut.
+                                    Anda dapat menambah kriteria sebanyak yang diperlukan dengan mengklik tombol "Tambah Kriteria".
+                                </p>
+                            </div>
                         </div>
                     </div>
 

@@ -79,16 +79,16 @@ export default function KPITree({
 
   function calculateIndicatorWeightSum(categoryId: string) {
     const categoryIndicators = getCategoryIndicators(categoryId)
-    return categoryIndicators.reduce((sum, ind) => sum + Number(ind.weight_percentage), 0)
+    return categoryIndicators.reduce((sum, ind) => sum + (Number(ind.weight_percentage) || 0), 0)
   }
 
   function calculateSubIndicatorWeightSum(indicatorId: string) {
     const subs = getIndicatorSubIndicators(indicatorId)
-    return subs.reduce((sum, s) => sum + Number(s.weight_percentage), 0)
+    return subs.reduce((sum, s) => sum + (Number(s.weight_percentage) || 0), 0)
   }
 
   function calculateCategoryWeightSum() {
-    return categories.reduce((sum, cat) => sum + Number(cat.weight_percentage), 0)
+    return categories.reduce((sum, cat) => sum + (Number(cat.weight_percentage) || 0), 0)
   }
 
   const categoryWeightSum = calculateCategoryWeightSum()
@@ -140,7 +140,7 @@ export default function KPITree({
                     <span className="font-semibold text-lg">{category.category}</span>
                     <span className="text-gray-700">{category.category_name}</span>
                     <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-medium">
-                      {Number(category.weight_percentage).toFixed(2)}%
+                      {(Number(category.weight_percentage) || 0).toFixed(2)}%
                     </span>
                   </div>
                   {category.description && (
@@ -215,7 +215,7 @@ export default function KPITree({
                                 <span className="font-mono text-sm text-gray-600">{indicator.code}</span>
                                 <span className="font-medium">{indicator.name}</span>
                                 <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs font-medium">
-                                  {Number(indicator.weight_percentage).toFixed(2)}%
+                                  {(Number(indicator.weight_percentage) || 0).toFixed(2)}%
                                 </span>
                                 {indicatorSubs.length > 0 && (
                                   <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs">
@@ -225,7 +225,7 @@ export default function KPITree({
                                 )}
                               </div>
                               <div className="flex gap-4 mt-1 text-sm text-gray-600">
-                                <span>Target: {Number(indicator.target_value).toFixed(2)}</span>
+                                <span>Target: {(Number(indicator.target_value) || 0).toFixed(2)}</span>
                                 {indicator.measurement_unit && (
                                   <span>Satuan: {indicator.measurement_unit}</span>
                                 )}
@@ -294,27 +294,27 @@ export default function KPITree({
                                           <span className="font-mono text-xs text-gray-500">{sub.code}</span>
                                           <span className="text-sm font-medium">{sub.name}</span>
                                           <span className="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-xs font-medium">
-                                            {Number(sub.weight_percentage).toFixed(2)}%
+                                            {(Number(sub.weight_percentage) || 0).toFixed(2)}%
                                           </span>
                                         </div>
                                         {/* Score badges */}
                                         <div className="flex gap-1 mt-2 flex-wrap">
-                                          {[
-                                            { val: sub.score_1, label: sub.score_1_label, color: 'bg-red-100 text-red-700 border-red-200' },
-                                            { val: sub.score_2, label: sub.score_2_label, color: 'bg-orange-100 text-orange-700 border-orange-200' },
-                                            { val: sub.score_3, label: sub.score_3_label, color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
-                                            { val: sub.score_4, label: sub.score_4_label, color: 'bg-blue-100 text-blue-700 border-blue-200' },
-                                            { val: sub.score_5, label: sub.score_5_label, color: 'bg-green-100 text-green-700 border-green-200' },
-                                          ].map((s, idx) => (
+                                          {sub.scoring_criteria?.map((criterion, idx) => (
                                             <span
                                               key={idx}
-                                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs ${s.color}`}
-                                              title={s.label}
+                                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs ${
+                                                idx === 0 ? 'bg-red-100 text-red-700 border-red-200' :
+                                                idx === 1 ? 'bg-orange-100 text-orange-700 border-orange-200' :
+                                                idx === 2 ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                                                idx === 3 ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                                'bg-green-100 text-green-700 border-green-200'
+                                              }`}
+                                              title={criterion.label}
                                             >
-                                              <span className="font-bold">{Number(s.val)}</span>
-                                              <span className="opacity-70">({s.label})</span>
+                                              <span className="font-bold">{Number(criterion.score) || 0}</span>
+                                              <span className="opacity-70">({criterion.label})</span>
                                             </span>
-                                          ))}
+                                          )) || []}
                                         </div>
                                         {sub.description && (
                                           <p className="text-xs text-gray-500 mt-1.5">{sub.description}</p>

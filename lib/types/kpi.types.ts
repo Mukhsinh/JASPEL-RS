@@ -22,6 +22,12 @@ export interface KPIIndicator {
   is_active: boolean
 }
 
+// Scoring criterion interface
+export interface ScoringCriterion {
+  score: number
+  label: string
+}
+
 export interface KPISubIndicator {
   id: string
   indicator_id: string
@@ -29,16 +35,7 @@ export interface KPISubIndicator {
   name: string
   target_value: number
   weight_percentage: number
-  score_1: number
-  score_2: number
-  score_3: number
-  score_4: number
-  score_5: number
-  score_1_label: string
-  score_2_label: string
-  score_3_label: string
-  score_4_label: string
-  score_5_label: string
+  scoring_criteria: ScoringCriterion[]
   measurement_unit: string | null
   description: string | null
   is_active: boolean
@@ -60,14 +57,5 @@ export interface SubIndicatorFormData {
   weight_percentage: string
   target_value: string
   measurement_unit: string
-  score_1: string
-  score_2: string
-  score_3: string
-  score_4: string
-  score_5: string
-  score_1_label: string
-  score_2_label: string
-  score_3_label: string
-  score_4_label: string
-  score_5_label: string
+  scoring_criteria: ScoringCriterion[]
 }

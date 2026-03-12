@@ -11,6 +11,8 @@ import { Upload, Save, Image as ImageIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface Settings {
+  app_name: string
+  developer_name: string
   organization_name: string
   organization_address: string
   organization_phone: string
@@ -43,6 +45,8 @@ interface Settings {
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>({
+    app_name: 'JASPEL',
+    developer_name: '',
     organization_name: '',
     organization_address: '',
     organization_phone: '',
@@ -108,6 +112,8 @@ export default function SettingsPage() {
       const sessionTimeout = settingsMap.session_timeout || {}
       
       setSettings({
+        app_name: orgSettings.appName || 'JASPEL',
+        developer_name: orgSettings.developerName || '',
         organization_name: orgSettings.name || '',
         organization_address: orgSettings.address || '',
         organization_phone: orgSettings.phone || '',
@@ -225,7 +231,8 @@ export default function SettingsPage() {
       
       // Prepare company_info object
       const companyInfo = {
-        appName: 'JASPEL',
+        appName: settings.app_name,
+        developerName: settings.developer_name,
         name: settings.organization_name,
         address: settings.organization_address,
         phone: settings.organization_phone,
@@ -371,9 +378,29 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Informasi Organisasi</CardTitle>
-            <CardDescription>Data organisasi yang akan ditampilkan di aplikasi</CardDescription>
+            <CardDescription>Data aplikasi dan organisasi yang akan ditampilkan di laporan dan aplikasi</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="app_name">Nama Aplikasi</Label>
+              <Input
+                id="app_name"
+                value={settings.app_name}
+                onChange={(e) => setSettings({ ...settings, app_name: e.target.value })}
+                placeholder="Masukkan nama aplikasi"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="developer_name">Nama Pengembang</Label>
+              <Input
+                id="developer_name"
+                value={settings.developer_name}
+                onChange={(e) => setSettings({ ...settings, developer_name: e.target.value })}
+                placeholder="Masukkan nama pengembang"
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="organization_name">Nama Organisasi</Label>
               <Input

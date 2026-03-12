@@ -35,8 +35,9 @@ interface IncentiveSlipData {
 export async function generateIncentiveSlipPDF(data: IncentiveSlipData) {
   const doc = new jsPDF()
   
-  // Get company info
+  // Get company info and settings
   const companyInfo = await getCompanyInfo()
+  const { data: footerData } = await getSetting('footer')
   
   let yPos = 15
   
@@ -59,11 +60,27 @@ export async function generateIncentiveSlipPDF(data: IncentiveSlipData) {
   doc.text(companyInfo.name, 105, yPos + 12, { align: 'center' })
   doc.text(companyInfo.address, 105, yPos + 17, { align: 'center' })
   
+  // Add developer name if available - ensure it's visible
+  if (companyInfo.developerName) {
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(52, 73, 94) // Dark gray for better visibility
+    doc.text(`Dikembangkan oleh: ${companyInfo.developerName}`, 105, yPos + 22, { align: 'center' })
+    doc.setTextColor(0, 0, 0)
+  } else {
+    // Fallback if no developer name in settings
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(52, 73, 94)
+    doc.text('Dikembangkan oleh: Tim Pengembang JASPEL', 105, yPos + 22, { align: 'center' })
+    doc.setTextColor(0, 0, 0)
+  }
+  
   doc.setFontSize(12)
   doc.setFont('helvetica', 'bold')
-  doc.text(`Periode: ${data.period}`, 105, yPos + 25, { align: 'center' })
+  doc.text(`Periode: ${data.period}`, 105, yPos + 30, { align: 'center' })
   
-  yPos = 45
+  yPos = 50
   
   // Employee Info
   doc.setFontSize(10)
@@ -176,10 +193,13 @@ export async function generateIncentiveSlipPDF(data: IncentiveSlipData) {
   const pageHeight = doc.internal.pageSize.height
   doc.setFontSize(8)
   doc.setFont('helvetica', 'italic')
+  doc.setTextColor(100, 100, 100)
   
-  // Get footer text from settings
-  const { data: footerData } = await getSetting('footer')
-  const footerText = footerData?.text || companyInfo.name
+  // Get footer text from settings - ensure it displays properly
+  let footerText = companyInfo.name
+  if (footerData?.text && footerData.text.trim()) {
+    footerText = footerData.text.trim()
+  }
   
   doc.text(footerText, 105, pageHeight - 15, { align: 'center' })
   doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 105, pageHeight - 10, { align: 'center' })
@@ -205,8 +225,9 @@ export async function generateSummaryReportPDF(
 ) {
   const doc = new jsPDF('landscape')
   
-  // Get company info
+  // Get company info and settings
   const companyInfo = await getCompanyInfo()
+  const { data: footerData } = await getSetting('footer')
   
   let yPos = 15
   
@@ -228,9 +249,25 @@ export async function generateSummaryReportPDF(
   doc.setFont('helvetica', 'normal')
   doc.text(companyInfo.name, 148, yPos + 12, { align: 'center' })
   
+  // Add developer name if available - ensure it's visible
+  if (companyInfo.developerName) {
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(52, 73, 94) // Dark gray for better visibility
+    doc.text(`Dikembangkan oleh: ${companyInfo.developerName}`, 148, yPos + 16, { align: 'center' })
+    doc.setTextColor(0, 0, 0)
+  } else {
+    // Fallback if no developer name in settings
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(52, 73, 94)
+    doc.text('Dikembangkan oleh: Tim Pengembang JASPEL', 148, yPos + 16, { align: 'center' })
+    doc.setTextColor(0, 0, 0)
+  }
+  
   doc.setFontSize(12)
   doc.setFont('helvetica', 'bold')
-  doc.text(`Periode: ${period}`, 148, yPos + 19, { align: 'center' })
+  doc.text(`Periode: ${period}`, 148, yPos + 22, { align: 'center' })
   
   // Summary Table
   const tableData = results.map((r, index) => [
@@ -261,7 +298,7 @@ export async function generateSummaryReportPDF(
   ])
   
   autoTable(doc, {
-    startY: 40,
+    startY: 45,
     head: [['No', 'Kode', 'Nama', 'Unit', 'Skor', 'Bruto', 'Pajak', 'Netto']],
     body: tableData,
     theme: 'grid',
@@ -289,10 +326,13 @@ export async function generateSummaryReportPDF(
   const pageHeight = doc.internal.pageSize.height
   doc.setFontSize(8)
   doc.setFont('helvetica', 'italic')
+  doc.setTextColor(100, 100, 100)
   
-  // Get footer text from settings
-  const { data: footerData } = await getSetting('footer')
-  const footerText = footerData?.text || companyInfo.name
+  // Get footer text from settings - ensure it displays properly
+  let footerText = companyInfo.name
+  if (footerData?.text && footerData.text.trim()) {
+    footerText = footerData.text.trim()
+  }
   
   doc.text(footerText, 148, pageHeight - 15, { align: 'center' })
   doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 148, pageHeight - 10, { align: 'center' })
@@ -317,8 +357,9 @@ export async function exportToPDF(options: ReportExportOptions): Promise<Buffer>
 
   const doc = new jsPDF()
   
-  // Get company info
+  // Get company info and settings
   const companyInfo = await getCompanyInfo()
+  const { data: footerData } = await getSetting('footer')
   
   let yPos = 15
 
@@ -358,13 +399,29 @@ export async function exportToPDF(options: ReportExportOptions): Promise<Buffer>
   doc.text(companyInfo.name, 105, yPos + 12, { align: 'center' })
   doc.text(companyInfo.address, 105, yPos + 17, { align: 'center' })
 
+  // Add developer name if available - ensure it's visible
+  if (companyInfo.developerName) {
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(52, 73, 94) // Dark gray for better visibility
+    doc.text(`Dikembangkan oleh: ${companyInfo.developerName}`, 105, yPos + 22, { align: 'center' })
+    doc.setTextColor(0, 0, 0)
+  } else {
+    // Fallback if no developer name in settings
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(52, 73, 94)
+    doc.text('Dikembangkan oleh: Tim Pengembang JASPEL', 105, yPos + 22, { align: 'center' })
+    doc.setTextColor(0, 0, 0)
+  }
+
   // Generation date
   const now = new Date()
   const dateStr = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
-  doc.text(`Periode: ${period}`, 105, yPos + 24, { align: 'center' })
-  doc.text(`Dicetak: ${dateStr}`, 105, yPos + 29, { align: 'center' })
+  doc.text(`Periode: ${period}`, 105, yPos + 29, { align: 'center' })
+  doc.text(`Dicetak: ${dateStr}`, 105, yPos + 34, { align: 'center' })
   
-  yPos = 50
+  yPos = 55
 
   // Prepare table data based on report type
   let headers: string[] = []
@@ -440,10 +497,13 @@ export async function exportToPDF(options: ReportExportOptions): Promise<Buffer>
   const pageHeight = doc.internal.pageSize.height
   doc.setFontSize(8)
   doc.setFont('helvetica', 'italic')
+  doc.setTextColor(100, 100, 100)
   
-  // Get footer text from settings
-  const { data: footerData } = await getSetting('footer')
-  const footerText = footerData?.text || companyInfo.name
+  // Get footer text from settings - ensure it displays properly
+  let footerText = companyInfo.name
+  if (footerData?.text && footerData.text.trim()) {
+    footerText = footerData.text.trim()
+  }
   
   doc.text(footerText, 105, pageHeight - 15, { align: 'center' })
   doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 105, pageHeight - 10, { align: 'center' })
