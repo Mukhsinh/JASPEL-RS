@@ -282,7 +282,7 @@ export async function parseExcelFile(file: File): Promise<any[]> {
         const jsonData = XLSX.utils.sheet_to_json(worksheet)
         
         resolve(jsonData)
-      } catch (error) {
+      } catch (error: any) {
         reject(error)
       }
     }

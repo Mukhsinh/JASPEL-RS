@@ -42,6 +42,12 @@ export default function KPIConfigPage() {
   const [selectedSubIndicator, setSelectedSubIndicator] = useState<KPISubIndicator | null>(null)
   const [selectedIndicatorForSub, setSelectedIndicatorForSub] = useState<KPIIndicator | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  // Ensure component is mounted before loading data
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const loadUnits = useCallback(async () => {
     try {
@@ -120,16 +126,22 @@ export default function KPIConfigPage() {
   }, [selectedUnit])
 
   useEffect(() => {
+    if (!mounted) return
+    
     setError(null)
-    loadUnits()
-  }, [loadUnits])
+    loadUnits().catch((err) => {
+      console.error('Failed to load units:', err)
+      setError('Gagal memuat data unit. Silakan refresh halaman.')
+      setIsLoading(false)
+    })
+  }, [mounted])
 
   useEffect(() => {
-    if (selectedUnit) {
-      setError(null)
-      loadKPIStructure()
-    }
-  }, [selectedUnit, loadKPIStructure])
+    if (!mounted || !selectedUnit) return
+    
+    setError(null)
+    loadKPIStructure()
+  }, [mounted, selectedUnit, loadKPIStructure])
 
   const handleAddCategory = useCallback(() => {
     setSelectedCategory(null)
@@ -284,7 +296,7 @@ export default function KPIConfigPage() {
     window.open(`/api/kpi-config/export?unitId=${selectedUnit}&format=${format}`, '_blank')
   }, [selectedUnit])
 
-  if (isLoading && units.length === 0) {
+  if (!mounted || (isLoading && units.length === 0)) {
     return (
       <div className="p-6 space-y-6">
         <Skeleton className="h-8 w-64" />

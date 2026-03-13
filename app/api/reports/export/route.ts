@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
         'Content-Disposition': `attachment; filename="${filename}"`,
       },
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Export error:', error)
     return NextResponse.json(
       { error: (error as Error).message },

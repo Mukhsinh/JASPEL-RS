@@ -535,7 +535,7 @@ export async function runFullCalculation(period: string) {
       message: 'Calculation completed successfully',
       employee_count: employeeCount || 0,
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Calculation error:', error)
     
     // Log error

@@ -29,7 +29,7 @@ class SafeStorageAdapter implements StorageAdapter {
         window.localStorage.removeItem(testKey)
         this.storage = window.localStorage
         console.log('[Storage] Using localStorage')
-      } catch (error) {
+      } catch (error: any) {
         console.warn('[Storage] localStorage not available, using fallback memory storage')
         this.storage = null
       }
@@ -55,7 +55,7 @@ class SafeStorageAdapter implements StorageAdapter {
         // Use fallback storage
         return this.fallbackStorage.get(key) || null
       }
-    } catch (error) {
+    } catch (error: any) {
       console.warn(`[Storage] Error getting item ${key}:`, error)
       // Try fallback
       return this.fallbackStorage.get(key) || null
@@ -75,7 +75,7 @@ class SafeStorageAdapter implements StorageAdapter {
       } else {
         console.log(`[Storage] Stored ${key} in fallback memory storage`)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.warn(`[Storage] Error setting item ${key}:`, error)
       // Fallback is already set above
     }
@@ -94,7 +94,7 @@ class SafeStorageAdapter implements StorageAdapter {
       } else {
         console.log(`[Storage] Removed ${key} from fallback memory storage`)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.warn(`[Storage] Error removing item ${key}:`, error)
       // Fallback is already removed above
     }
@@ -116,7 +116,7 @@ class SafeStorageAdapter implements StorageAdapter {
         supabaseKeys.forEach(key => this.storage!.removeItem(key))
       }
       this.fallbackStorage.clear()
-    } catch (error) {
+    } catch (error: any) {
       console.warn('[Storage] clear error:', error)
       this.fallbackStorage.clear()
     }
@@ -150,7 +150,7 @@ export function clearAllStorage(): void {
         }
       }
       sessionKeys.forEach(key => window.sessionStorage.removeItem(key))
-    } catch (error) {
+    } catch (error: any) {
       console.warn('[Storage] sessionStorage clear error:', error)
     }
   }

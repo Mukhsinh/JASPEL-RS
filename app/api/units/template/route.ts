@@ -42,7 +42,7 @@ export async function GET() {
         'Content-Disposition': 'attachment; filename="Template_Unit.xlsx"'
       }
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error generating template:', error)
     return NextResponse.json(
       { error: 'Failed to generate template' },

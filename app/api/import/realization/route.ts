@@ -171,7 +171,7 @@ export async function POST(request: NextRequest) {
       message: `Successfully imported ${validRows.length} records`,
       importedCount: validRows.length,
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Import error:', error)
     return NextResponse.json(
       { error: (error as Error).message },

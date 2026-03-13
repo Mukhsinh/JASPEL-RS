@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Format tidak didukung' }, { status: 400 })
     }
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Export error:', error)
     return NextResponse.json({ error: 'Gagal mengekspor laporan' }, { status: 500 })
   }

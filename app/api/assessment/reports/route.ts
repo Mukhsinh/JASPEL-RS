@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       default:
         return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 })
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Assessment reports API error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },

@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true, data })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Report generation error:', error)
     return NextResponse.json(
       { error: (error as Error).message },

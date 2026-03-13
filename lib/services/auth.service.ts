@@ -162,7 +162,7 @@ class AuthService {
         success: true,
         user: userDataResult,
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('[AUTH] Exception during sign in:', error)
       
       // Handle specific storage errors

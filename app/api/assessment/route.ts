@@ -34,7 +34,7 @@ async function logAssessmentAudit(
         details,
         created_at: new Date().toISOString()
       })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Audit logging failed:', error)
     // Don't throw error to avoid breaking the main operation
   }
@@ -154,7 +154,7 @@ export async function GET(request: NextRequest) {
     const assessments = await getAssessmentsForEmployee(employeeId, period)
     
     return NextResponse.json({ assessments })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Assessment GET error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch assessments' }, 
@@ -209,7 +209,7 @@ export async function POST(request: NextRequest) {
     const savedAssessment = await upsertAssessment(assessment)
     
     return NextResponse.json({ assessment: savedAssessment })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Assessment POST error:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to save assessment' }, 
@@ -264,7 +264,7 @@ export async function PUT(request: NextRequest) {
     const updatedAssessment = await upsertAssessment(assessment)
     
     return NextResponse.json({ assessment: updatedAssessment })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Assessment PUT error:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to update assessment' }, 

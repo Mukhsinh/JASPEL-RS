@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
       try {
         const { count, error } = await getUnreadCount(user.id, supabase)
         return NextResponse.json({ count: error ? 0 : count })
-      } catch (error) {
+      } catch (error: any) {
         return NextResponse.json({ count: 0 })
       }
     }
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     try {
       const { data, error } = await getNotifications(user.id, supabase)
       return NextResponse.json(error ? [] : data)
-    } catch (error) {
+    } catch (error: any) {
       return NextResponse.json([])
     }
   } catch (error: any) {

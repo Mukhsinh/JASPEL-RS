@@ -19,14 +19,14 @@ export async function createClient() {
         set(name: string, value: string, options: any) {
           try {
             cookieStore.set(name, value, options)
-          } catch (error) {
+          } catch (error: any) {
             // Handle cookie setting errors (e.g., in middleware)
           }
         },
         remove(name: string, options: any) {
           try {
             cookieStore.set(name, '', { ...options, maxAge: 0 })
-          } catch (error) {
+          } catch (error: any) {
             // Handle cookie removal errors
           }
         },
@@ -54,14 +54,14 @@ export async function createAdminClient() {
         set(name: string, value: string, options: any) {
           try {
             cookieStore.set(name, value, options)
-          } catch (error) {
+          } catch (error: any) {
             // Handle cookie setting errors
           }
         },
         remove(name: string, options: any) {
           try {
             cookieStore.set(name, '', { ...options, maxAge: 0 })
-          } catch (error) {
+          } catch (error: any) {
             // Handle cookie removal errors
           }
         },

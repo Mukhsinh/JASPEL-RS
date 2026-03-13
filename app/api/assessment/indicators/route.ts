@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
       indicators: categorizedIndicators,
       total_indicators: indicatorsWithAssessments.length 
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Assessment indicators GET error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch KPI indicators' }, 

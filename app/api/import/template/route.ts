@@ -164,7 +164,7 @@ export async function GET(request: NextRequest) {
         'Content-Disposition': `attachment; filename="${templateType}-import-template.xlsx"`,
       },
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Template generation error:', error)
     return NextResponse.json(
       { error: (error as Error).message },

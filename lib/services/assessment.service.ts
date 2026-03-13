@@ -17,7 +17,7 @@ export async function getAvailablePeriods(): Promise<string[]> {
     }
     
     return data?.map(item => item.period) || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Exception in getAvailablePeriods:', error)
     return []
   }
@@ -39,7 +39,7 @@ export async function getAssessmentStatus(unitId: string, period: string): Promi
       return []
     }
     return data || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Exception in getAssessmentStatus:', error)
     return []
   }
@@ -61,7 +61,7 @@ export async function getAssessmentsForEmployee(employeeId: string, period: stri
       return []
     }
     return data || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Exception in getAssessmentsForEmployee:', error)
     return []
   }
@@ -122,7 +122,7 @@ export async function getAssessmentIndicators(employeeId: string, period: string
         current_assessment: assessmentMap.get(indicator.id)
       }
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Exception in getAssessmentIndicators:', error)
     return []
   }
@@ -196,7 +196,7 @@ export async function upsertAssessment(assessment: Assessment): Promise<Assessme
     }
 
     return result
-  } catch (error) {
+  } catch (error: any) {
     console.error('Exception in upsertAssessment:', error)
     return null
   }

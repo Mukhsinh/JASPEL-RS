@@ -200,7 +200,7 @@ export async function middleware(request: NextRequest) {
     response.headers.set('X-XSS-Protection', '1; mode=block')
     
     return response
-  } catch (error) {
+  } catch (error: any) {
     console.error('Middleware error:', error)
     
     // On any error, redirect to login and clear cookies

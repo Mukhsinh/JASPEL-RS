@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
         summary 
       })
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Assessment status GET error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch assessment status' }, 

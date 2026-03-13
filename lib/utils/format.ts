@@ -70,7 +70,7 @@ export function formatDate(date: Date | string | null | undefined): string {
       month: '2-digit',
       year: 'numeric',
     }).format(dateObj)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error formatting date:', error)
     return '-'
   }
@@ -101,7 +101,7 @@ export function formatDateTime(date: Date | string | null | undefined): string {
       minute: '2-digit',
       hour12: false,
     }).format(dateObj)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error formatting datetime:', error)
     return '-'
   }
@@ -129,7 +129,7 @@ export function formatTime(date: Date | string | null | undefined): string {
       minute: '2-digit',
       hour12: false,
     }).format(dateObj)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error formatting time:', error)
     return '-'
   }
@@ -198,7 +198,7 @@ export function formatRelativeTime(date: Date | string): string {
     } else {
       return formatDate(dateObj)
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error formatting relative time:', error)
     return '-'
   }

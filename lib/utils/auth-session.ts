@@ -37,7 +37,7 @@ export function clearAuthStorage() {
     sessionKeysToRemove.forEach(key => sessionStorage.removeItem(key))
 
     console.log('Auth storage cleared')
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error clearing auth storage:', error)
   }
 }
@@ -62,7 +62,7 @@ export async function handleInvalidRefreshToken() {
     const currentPath = window.location.pathname
     const loginUrl = `/login?redirectTo=${encodeURIComponent(currentPath)}&error=session_expired`
     window.location.href = loginUrl
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error handling invalid refresh token:', error)
     // Force redirect anyway
     window.location.href = '/login?error=session_expired'
@@ -114,7 +114,7 @@ export async function verifySession(): Promise<boolean> {
     }
     
     return true
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error verifying session:', error)
     await handleInvalidRefreshToken()
     return false

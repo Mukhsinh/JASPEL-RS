@@ -18,7 +18,7 @@ export async function GET() {
       }
     })
     
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error generating system guide:', error)
     return NextResponse.json(
       { error: 'Gagal menghasilkan panduan sistem' },

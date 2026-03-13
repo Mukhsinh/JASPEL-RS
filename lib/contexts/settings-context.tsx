@@ -185,7 +185,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         return () => {
           supabase.removeChannel(channel)
         }
-      } catch (err) {
+      } catch (err: any) {
         // Silently handle subscription errors
         if (err?.message?.includes('Session timeout') || 
             err?.message?.includes('Cannot read properties of undefined')) {
