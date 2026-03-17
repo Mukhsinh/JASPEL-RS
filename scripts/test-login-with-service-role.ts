@@ -1,100 +1,107 @@
+#!/usr/bin/env tsx
+
+/**
+ * Test login using service role to bypass RLS and see what's happening
+ */
+
+import { config } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
-import * as dotenv from 'dotenv'
-import * as path from 'path'
 
 // Load environment variables
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
+config({ path: '.env.local' })
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 async function testLoginWithServiceRole() {
-  console.log('🧪 Testing Login with Service Role Key...\n')
-
-  // Create client with service role (bypasses RLS)
-  const supabaseService = createClient(supabaseUrl, supabaseServiceKey)
-
-  const email = 'mukhsin9@gmail.com'
-
-  console.log('1️⃣ Checking if user exists in auth.users...')
-  const { data: authUsers, error: authError } = await supabaseService.auth.admin.listUsers()
+  console.log('🔐 Testing login with service role...')
   
-  if (authError) {
-    console.error('❌ Failed to list users:', authError.message)
-    return
-  }
+  const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  })
 
-  const authUser = authUsers.users.find(u => u.email === email)
-  
-  if (!authUser) {
-    console.error('❌ User not found in auth.users')
-    return
-  }
-
-  console.log('✅ User found in auth.users')
-  console.log('   ID:', authUser.id)
-  console.log('   Email:', authUser.email)
-
-  console.log('\n2️⃣ Checking t_user table...')
-  const { data: userData, error: userError } = await supabaseService
-    .from('t_user')
-    .select('*')
-    .eq('id', authUser.id)
-    .single()
-
-  if (userError) {
-    console.error('❌ Failed to fetch from t_user:', userError.message)
-    console.log('\n🔧 Attempting to create t_user record...')
+  try {
+    // 1. Test normal user login to get JWT
+    console.log('\n1. Testing user login to inspect JWT...')
     
-    // Try to create the record
-    const { data: newUser, error: createError } = await supabaseService
-      .from('t_user')
-      .insert({
-        id: authUser.id,
-        email: authUser.email,
-        role: 'superadmin',
-        is_active: true
-      })
-      .select()
-      .single()
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: 'mukhsin9@gmail.com',
+      password: 'admin123'
+    })
     
-    if (createError) {
-      console.error('❌ Failed to create t_user:', createError.message)
+    if (authError || !authData.user) {
+      console.error('❌ Login failed:', authError)
       return
     }
     
-    console.log('✅ Created t_user record')
-    console.log('   User:', newUser)
-  } else {
-    console.log('✅ User found in t_user')
-    console.log('   ID:', userData.id)
-    console.log('   Email:', userData.email)
-    console.log('   Role:', userData.role)
-    console.log('   Employee ID:', userData.employee_id)
-    console.log('   Active:', userData.is_active)
-  }
-
-  console.log('\n3️⃣ Checking m_employees if employee_id exists...')
-  if (userData?.employee_id) {
-    const { data: employeeData, error: employeeError } = await supabaseService
+    console.log('✅ Login successful')
+    console.log('   - User ID:', authData.user.id)
+    console.log('   - Email:', authData.user.email)
+    console.log('   - user_metadata:', JSON.stringify(authData.user.user_metadata, null, 2))
+    console.log('   - raw_user_meta_data:', JSON.stringify(authData.user.raw_user_meta_data, null, 2))
+    
+    // 2. Test employee fetch with user session (will use RLS)
+    console.log('\n2. Testing employee fetch with user session (RLS enabled)...')
+    
+    const userSupabase = createClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
+    
+    // Set the session manually
+    await userSupabase.auth.setSession({
+      access_token: authData.session.access_token,
+      refresh_token: authData.session.refresh_token
+    })
+    
+    const { data: employeeWithRLS, error: rlsError } = await userSupabase
       .from('m_employees')
-      .select('*')
-      .eq('id', userData.employee_id)
+      .select('id, full_name, role, unit_id, is_active, user_id')
+      .eq('user_id', authData.user.id)
       .single()
-
-    if (employeeError) {
-      console.error('❌ Failed to fetch employee:', employeeError.message)
+    
+    if (rlsError) {
+      console.error('❌ Employee fetch with RLS failed:', rlsError)
     } else {
-      console.log('✅ Employee data found')
-      console.log('   Full Name:', employeeData.full_name)
-      console.log('   Unit ID:', employeeData.unit_id)
-      console.log('   Employee Code:', employeeData.employee_code)
+      console.log('✅ Employee fetch with RLS successful:', employeeWithRLS)
     }
-  } else {
-    console.log('⚠️ No employee_id linked')
+    
+    // 3. Test employee fetch with service role (bypasses RLS)
+    console.log('\n3. Testing employee fetch with service role (RLS bypassed)...')
+    
+    const { data: employeeNoRLS, error: noRlsError } = await supabase
+      .from('m_employees')
+      .select('id, full_name, role, unit_id, is_active, user_id')
+      .eq('user_id', authData.user.id)
+      .single()
+    
+    if (noRlsError) {
+      console.error('❌ Employee fetch without RLS failed:', noRlsError)
+    } else {
+      console.log('✅ Employee fetch without RLS successful:', employeeNoRLS)
+    }
+    
+    // 4. Check JWT content
+    console.log('\n4. Checking JWT content...')
+    const { data: { user } } = await userSupabase.auth.getUser()
+    if (user) {
+      console.log('   - JWT user_metadata:', JSON.stringify(user.user_metadata, null, 2))
+      console.log('   - JWT raw_user_meta_data:', JSON.stringify(user.raw_user_meta_data, null, 2))
+    }
+    
+    // Clean up
+    await supabase.auth.signOut()
+    await userSupabase.auth.signOut()
+    
+  } catch (error) {
+    console.error('❌ Test failed:', error)
   }
-
-  console.log('\n✅ Diagnosis complete!')
 }
 
+// Run the test
 testLoginWithServiceRole().catch(console.error)

@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { Settings, getSettings, updateSettings as updateSettingsService } from '@/lib/services/settings.service'
-import { createClient } from '@/lib/supabase/client'
 
 interface SettingsContextValue {
   settings: Settings | null
@@ -14,49 +13,36 @@ interface SettingsContextValue {
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(undefined)
 
-// In-memory cache
+// Simple cache
 let settingsCache: Settings | null = null
 let cacheTimestamp = 0
 const CACHE_TTL = 60000 // 1 minute
 
+// Simplified settings provider - no complex retry logic
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<Settings | null>(settingsCache)
-  const [loading, setLoading] = useState(!settingsCache)
+  const [loading, setLoading] = useState(false) // Start as false to prevent loading loop
   const [error, setError] = useState<string | null>(null)
 
-  // Load settings dengan caching
+  // Simplified load settings
   const loadSettings = useCallback(async (forceRefresh = false) => {
     try {
-      // Check cache
+      // Check cache first
       if (!forceRefresh && settingsCache && Date.now() - cacheTimestamp < CACHE_TTL) {
         setSettings(settingsCache)
-        setLoading(false)
         return
       }
 
       setLoading(true)
-      setError(null)
-
       const { data, error: fetchError } = await getSettings()
 
-      if (fetchError) {
-        // Don't throw error, just log it and set default settings
-        console.warn('Failed to load settings:', fetchError)
-        setError(null) // Don't show error to user
-        setLoading(false)
-        return
-      }
-
-      if (data) {
+      if (data && !fetchError) {
         settingsCache = data
         cacheTimestamp = Date.now()
         setSettings(data)
-        setError(null)
       }
-    } catch (err: any) {
-      console.warn('Failed to load settings:', err)
-      // Don't show error to user, just use defaults
-      setError(null)
+    } catch (err) {
+      console.warn('Settings load failed (non-critical):', err)
     } finally {
       setLoading(false)
     }
@@ -66,14 +52,10 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const updateSettings = useCallback(async (newSettings: Partial<Settings>) => {
     try {
       setLoading(true)
-      setError(null)
-
       const result = await updateSettingsService(newSettings)
 
       if (result.success) {
-        // Invalidate cache
         settingsCache = null
-        cacheTimestamp = 0
         await loadSettings(true)
         return { success: true, error: null }
       } else {
@@ -92,111 +74,14 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   // Refresh settings
   const refreshSettings = useCallback(async () => {
     settingsCache = null
-    cacheTimestamp = 0
     await loadSettings(true)
   }, [loadSettings])
 
-  // Initial load - only if user is authenticated
+  // Simple initialization - load once when mounted
   useEffect(() => {
-    const checkAuthAndLoad = async () => {
-      try {
-        // Skip if running on server
-        if (typeof window === 'undefined') {
-          setLoading(false)
-          return
-        }
-
-        const supabase = createClient()
-        
-        // Add timeout to prevent hanging
-        const sessionPromise = supabase.auth.getSession()
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session timeout')), 5000)
-        )
-        
-        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any
-
-        // Only load settings if user is authenticated
-        if (session) {
-          await loadSettings()
-        } else {
-          setLoading(false)
-        }
-      } catch (err: any) {
-        // Silently handle various auth errors
-        if (err?.name === 'AbortError' || 
-            err?.message?.includes('Lock broken') ||
-            err?.message?.includes('Session timeout') ||
-            err?.message?.includes('Cannot read properties of undefined')) {
-          console.warn('[Settings] Auth error, retrying in 2s...', err.message)
-          setTimeout(() => checkAuthAndLoad(), 2000)
-          return
-        }
-        console.warn('Settings context init error:', err)
-        setLoading(false)
-      }
+    if (typeof window !== 'undefined' && !settingsCache) {
+      loadSettings()
     }
-
-    // Delay to prevent hydration issues and allow storage to initialize
-    const timer = setTimeout(() => {
-      checkAuthAndLoad()
-    }, 100)
-
-    return () => clearTimeout(timer)
-  }, [loadSettings])
-
-  // Subscribe to real-time changes - only if authenticated
-  useEffect(() => {
-    const supabase = createClient()
-
-    const setupSubscription = async () => {
-      try {
-        // Skip if running on server
-        if (typeof window === 'undefined') return
-
-        // Add timeout for session check
-        const sessionPromise = supabase.auth.getSession()
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session timeout')), 3000)
-        )
-        
-        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any
-
-        // Only subscribe if user is authenticated
-        if (!session) return
-
-        const channel = supabase
-          .channel('settings-changes')
-          .on(
-            'postgres_changes',
-            {
-              event: '*',
-              schema: 'public',
-              table: 't_settings'
-            },
-            () => {
-              settingsCache = null
-              cacheTimestamp = 0
-              loadSettings(true)
-            }
-          )
-          .subscribe()
-
-        return () => {
-          supabase.removeChannel(channel)
-        }
-      } catch (err: any) {
-        // Silently handle subscription errors
-        if (err?.message?.includes('Session timeout') || 
-            err?.message?.includes('Cannot read properties of undefined')) {
-          console.warn('[Settings] Subscription setup failed, continuing without realtime updates')
-          return
-        }
-        console.warn('Settings subscription error:', err)
-      }
-    }
-
-    setupSubscription()
   }, [loadSettings])
 
   const value: SettingsContextValue = {

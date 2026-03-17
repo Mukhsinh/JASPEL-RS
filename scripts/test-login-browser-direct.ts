@@ -1,146 +1,55 @@
-/**
- * Test login flow and check what happens after successful authentication
- */
+#!/usr/bin/env tsx
 
-import { createClient } from '@supabase/supabase-js'
-import * as dotenv from 'dotenv'
-import * as path from 'path'
+import { config } from 'dotenv'
+import { spawn } from 'child_process'
 
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
+// Load environment variables
+config({ path: '.env.local' })
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-async function testLoginFlow() {
-  console.log('🧪 Testing Complete Login Flow\n')
-  console.log('=' .repeat(60))
+async function testLoginInBrowser() {
+  console.log('🚀 Starting development server for login test...')
   
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: false, // Don't persist in Node.js
-      autoRefreshToken: false,
+  // Start the dev server
+  const devServer = spawn('npm', ['run', 'dev'], {
+    stdio: 'pipe',
+    shell: true
+  })
+  
+  let serverReady = false
+  
+  devServer.stdout?.on('data', (data) => {
+    const output = data.toString()
+    console.log(output)
+    
+    if (output.includes('localhost:3002') || output.includes('Ready in')) {
+      serverReady = true
+      console.log('\n✅ Server is ready!')
+      console.log('🌐 Please test login manually at: http://localhost:3002/login')
+      console.log('📧 Email: mukhsin9@gmail.com')
+      console.log('🔑 Password: admin123')
+      console.log('\n🔍 Check browser console for any errors during login')
+      console.log('📋 After login, check if you are redirected to /dashboard')
+      console.log('\n⏹️  Press Ctrl+C to stop the server when done testing')
     }
   })
-
-  const email = 'mukhsin9@gmail.com'
-  const password = 'admin123'
-
-  try {
-    // Step 1: Sign in
-    console.log('\n📝 Step 1: Signing in...')
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (authError || !authData.user) {
-      console.error('❌ Login failed:', authError?.message)
-      return
+  
+  devServer.stderr?.on('data', (data) => {
+    const error = data.toString()
+    if (!error.includes('webpack.cache.PackFileCacheStrategy')) {
+      console.error('❌ Server error:', error)
     }
-
-    console.log('✅ Login successful')
-    console.log('   User ID:', authData.user.id)
-    console.log('   Email:', authData.user.email)
-    console.log('   Session expires:', new Date(authData.session.expires_at! * 1000).toISOString())
-
-    // Step 2: Check user metadata
-    console.log('\n📝 Step 2: Checking user metadata...')
-    const role = authData.user.user_metadata?.role
-    const fullName = authData.user.user_metadata?.full_name
-
-    if (!role) {
-      console.error('❌ Role not found in metadata')
-      return
-    }
-
-    console.log('✅ User metadata found')
-    console.log('   Role:', role)
-    console.log('   Full Name:', fullName)
-
-    // Step 3: Fetch employee data
-    console.log('\n📝 Step 3: Fetching employee data...')
-    const { data: employee, error: employeeError } = await supabase
-      .from('m_employees')
-      .select('id, employee_code, full_name, unit_id, is_active')
-      .eq('user_id', authData.user.id)
-      .maybeSingle()
-
-    if (employeeError || !employee) {
-      console.error('❌ Employee fetch failed:', employeeError?.message)
-      return
-    }
-
-    console.log('✅ Employee data found')
-    console.log('   Employee ID:', employee.id)
-    console.log('   Employee Code:', employee.employee_code)
-    console.log('   Full Name:', employee.full_name)
-    console.log('   Unit ID:', employee.unit_id)
-    console.log('   Is Active:', employee.is_active)
-
-    // Step 4: Check if employee is active
-    if (!employee.is_active) {
-      console.error('❌ Employee is not active')
-      return
-    }
-
-    console.log('✅ Employee is active')
-
-    // Step 5: Test dashboard access (simulate what middleware does)
-    console.log('\n📝 Step 5: Testing dashboard access...')
-    
-    // Check if user can access dashboard data
-    const { count: unitsCount, error: unitsError } = await supabase
-      .from('m_units')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true)
-
-    if (unitsError) {
-      console.error('❌ Dashboard data access failed:', unitsError.message)
-    } else {
-      console.log('✅ Dashboard data accessible')
-      console.log('   Units count:', unitsCount)
-    }
-
-    // Step 6: Summary
-    console.log('\n' + '=' .repeat(60))
-    console.log('📊 LOGIN FLOW SUMMARY:')
-    console.log('=' .repeat(60))
-    console.log('✅ Authentication: SUCCESS')
-    console.log('✅ Session: VALID')
-    console.log('✅ User Metadata: FOUND')
-    console.log('✅ Employee Data: FOUND')
-    console.log('✅ Employee Status: ACTIVE')
-    console.log('✅ Dashboard Access: OK')
-    console.log('')
-    console.log('🎯 Expected behavior after login:')
-    console.log('   1. User clicks "Masuk ke Sistem"')
-    console.log('   2. Button shows "Memproses..."')
-    console.log('   3. After 1 second delay, redirect to /dashboard')
-    console.log('   4. Middleware validates session')
-    console.log('   5. Dashboard page loads with user data')
-    console.log('')
-    console.log('🔍 If login doesn\'t work in browser:')
-    console.log('   1. Open DevTools Console (F12)')
-    console.log('   2. Look for errors during login')
-    console.log('   3. Check Network tab for failed requests')
-    console.log('   4. Clear browser cache and cookies')
-    console.log('   5. Try in incognito mode')
-    console.log('')
-    console.log('💡 Common issues:')
-    console.log('   - Browser blocking cookies')
-    console.log('   - CORS issues with Supabase')
-    console.log('   - JavaScript errors in console')
-    console.log('   - Redirect being blocked')
-    console.log('   - Session not persisting in localStorage')
-    console.log('')
-
-    // Clean up
-    await supabase.auth.signOut()
-
-  } catch (error: any) {
-    console.error('\n❌ Unexpected error:', error.message)
-    console.error('Stack:', error.stack)
-  }
+  })
+  
+  devServer.on('close', (code) => {
+    console.log(`\n🛑 Server stopped with code ${code}`)
+  })
+  
+  // Keep the process alive
+  process.on('SIGINT', () => {
+    console.log('\n🛑 Stopping server...')
+    devServer.kill()
+    process.exit(0)
+  })
 }
 
-testLoginFlow()
+testLoginInBrowser().catch(console.error)

@@ -13,21 +13,6 @@ interface AssessmentStatus {
   completion_percentage: number
 }
 
-async function getAssessmentStatus(unitId: string, period: string): Promise<AssessmentStatus[]> {
-  const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('v_assessment_status')
-    .select('*')
-    .eq('unit_id', unitId)
-    .eq('period', period)
-    .order('full_name')
-
-  if (error) {
-    throw new Error(`Failed to fetch assessment status: ${error.message}`)
-  }
-  return data || []
-}
-
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -35,19 +20,31 @@ export async function GET(request: NextRequest) {
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
+      console.error('Authentication error:', authError)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Get current user's employee record
-    const { data: currentEmployee } = await supabase
+    const { data: currentEmployee, error: employeeError } = await supabase
       .from('m_employees')
-      .select('id, role, unit_id')
+      .select('id, role, unit_id, full_name')
       .eq('user_id', user.id)
       .single()
 
+    if (employeeError) {
+      console.error('Employee lookup error:', employeeError)
+      return NextResponse.json({ 
+        error: 'Failed to get employee record', 
+        details: employeeError.message 
+      }, { status: 500 })
+    }
+
     if (!currentEmployee) {
+      console.error('No employee record found for user:', user.id)
       return NextResponse.json({ error: 'Employee record not found' }, { status: 404 })
     }
+
+    console.log('Current employee:', currentEmployee.full_name, 'Role:', currentEmployee.role)
 
     const { searchParams } = new URL(request.url)
     const period = searchParams.get('period')
@@ -57,32 +54,41 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Period is required' }, { status: 400 })
     }
 
-    let employees: AssessmentStatus[]
-    
-    // Apply role-based filtering
+    console.log('Fetching employees for period:', period)
+
+    // Query the view directly - RLS should handle access control
+    let query = supabase
+      .from('v_assessment_status')
+      .select('*')
+      .eq('period', period)
+      .order('full_name')
+
+    // Apply unit filtering for unit managers
     if (currentEmployee.role === 'unit_manager') {
-      employees = await getAssessmentStatus(currentEmployee.unit_id, period)
-    } else {
-      // Superadmin can see all employees - get all units
-      const { data: units } = await supabase
-        .from('m_units')
-        .select('id')
-        .eq('is_active', true)
-      
-      const allEmployees: AssessmentStatus[] = []
-      for (const unit of units || []) {
-        const unitEmployees = await getAssessmentStatus(unit.id, period)
-        allEmployees.push(...unitEmployees)
-      }
-      employees = allEmployees
+      query = query.eq('unit_id', currentEmployee.unit_id)
+      console.log('Filtering by unit for unit manager:', currentEmployee.unit_id)
     }
+
+    const { data: employees, error: viewError } = await query
+
+    if (viewError) {
+      console.error('View query error:', viewError)
+      return NextResponse.json({ 
+        error: 'Failed to fetch employees', 
+        details: viewError.message 
+      }, { status: 500 })
+    }
+
+    console.log('Found employees:', employees?.length || 0)
 
     // Filter by status if provided
+    let filteredEmployees = employees || []
     if (status && ['Belum Dinilai', 'Sebagian', 'Selesai'].includes(status)) {
-      employees = employees.filter((emp: AssessmentStatus) => emp.status === status)
+      filteredEmployees = filteredEmployees.filter((emp: AssessmentStatus) => emp.status === status)
+      console.log('Filtered by status:', status, 'Count:', filteredEmployees.length)
     }
 
-    return NextResponse.json({ employees })
+    return NextResponse.json({ employees: filteredEmployees })
   } catch (error) {
     console.error('Assessment employees GET error:', error)
     return NextResponse.json(

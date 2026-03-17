@@ -49,13 +49,13 @@ export async function createNotification(
   return { data, error: null }
 }
 
-export async function getNotifications(userId: string, supabaseClient?: any) {
+export async function getNotifications(employeeId: string, supabaseClient?: any) {
   const supabase = getSupabaseClient(supabaseClient)
 
   const { data, error } = await supabase
     .from('t_notification')
     .select('*')
-    .eq('user_id', userId)
+    .eq('user_id', employeeId)
     .order('created_at', { ascending: false })
 
   if (error) {
@@ -70,6 +70,7 @@ export async function getUnreadCount(userId: string, supabaseClient?: any) {
   try {
     const supabase = getSupabaseClient(supabaseClient)
 
+    // userId is already auth.user.id, use it directly
     const { count, error } = await supabase
       .from('t_notification')
       .select('*', { count: 'exact', head: true })

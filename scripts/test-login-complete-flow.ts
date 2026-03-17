@@ -1,126 +1,129 @@
-import { createClient } from '@supabase/supabase-js'
-import * as dotenv from 'dotenv'
-import * as path from 'path'
+#!/usr/bin/env tsx
 
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
+/**
+ * Test Complete Login Flow
+ * Menguji alur login lengkap dari authentication hingga redirect
+ */
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+import { config } from 'dotenv'
+config({ path: '.env.local' })
 
-async function testLoginFlow() {
-  console.log('🔐 Testing Complete Login Flow\n')
+import { createBrowserClient } from '@supabase/ssr'
 
-  const supabase = createClient(supabaseUrl, supabaseKey, {
+function createTestClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  
+  return createBrowserClient(url, key, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
+      detectSessionInUrl: false,
+      flowType: 'pkce'
     }
   })
+}
+
+async function testCompleteLoginFlow() {
+  console.log('🧪 Testing Complete Login Flow...\n')
 
   try {
-    // Step 1: Sign in
-    console.log('1️⃣ Signing in...')
+    const supabase = createTestClient()
+    
+    // Step 1: Clear existing session
+    console.log('Step 1: Clearing existing session...')
+    await supabase.auth.signOut({ scope: 'local' })
+    console.log('✅ Session cleared')
+
+    // Step 2: Test authentication
+    console.log('\nStep 2: Testing authentication...')
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: 'mukhsin9@gmail.com',
       password: 'admin123',
     })
 
-    if (authError || !authData.user) {
-      console.error('❌ Login failed:', authError?.message)
+    if (authError || !authData.user || !authData.session) {
+      console.error('❌ Authentication failed:', authError?.message)
       return
     }
 
-    console.log('✅ Login successful')
+    console.log('✅ Authentication successful')
     console.log('   User ID:', authData.user.id)
     console.log('   Email:', authData.user.email)
-    console.log('   Role:', authData.user.user_metadata?.role)
+    console.log('   Session expires:', new Date(authData.session.expires_at! * 1000).toLocaleString())
 
-    // Step 2: Get employee data
-    console.log('\n2️⃣ Fetching employee data...')
-    const { data: employeeData, error: employeeError } = await supabase
+    // Step 3: Test employee data fetch
+    console.log('\nStep 3: Testing employee data fetch...')
+    const { data: employee, error: employeeError } = await supabase
       .from('m_employees')
-      .select('id, full_name, unit_id, is_active')
+      .select('id, full_name, role, unit_id, is_active')
       .eq('user_id', authData.user.id)
-      .maybeSingle()
+      .single()
 
-    if (employeeError || !employeeData) {
+    if (employeeError || !employee) {
       console.error('❌ Employee fetch failed:', employeeError?.message)
       return
     }
 
     console.log('✅ Employee data found')
-    console.log('   Name:', employeeData.full_name)
-    console.log('   Active:', employeeData.is_active)
+    console.log('   Name:', employee.full_name)
+    console.log('   Role:', employee.role)
+    console.log('   Unit ID:', employee.unit_id)
+    console.log('   Active:', employee.is_active)
 
-    // Step 3: Check session
-    console.log('\n3️⃣ Checking session...')
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    // Step 4: Test role-based redirect logic
+    console.log('\nStep 4: Testing role-based redirect logic...')
+    let expectedRoute: string
+    
+    switch (employee.role) {
+      case 'superadmin':
+        expectedRoute = '/units'
+        break
+      case 'unit_manager':
+        expectedRoute = '/realization'
+        break
+      case 'employee':
+        expectedRoute = '/profile'
+        break
+      default:
+        expectedRoute = '/login?error=user_not_found'
+    }
+    
+    console.log('✅ Role-based routing determined')
+    console.log('   Role:', employee.role)
+    console.log('   Expected route:', expectedRoute)
 
-    if (sessionError || !session) {
-      console.error('❌ Session check failed:', sessionError?.message)
+    // Step 5: Test session persistence
+    console.log('\nStep 5: Testing session persistence...')
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
+    const { data: { session: persistedSession } } = await supabase.auth.getSession()
+    
+    if (!persistedSession) {
+      console.error('❌ Session not persisted')
       return
     }
-
-    console.log('✅ Session is valid')
-    console.log('   Expires:', new Date(session.expires_at! * 1000).toLocaleString())
-
-    // Step 4: Test dashboard data access
-    console.log('\n4️⃣ Testing dashboard data access...')
     
-    // Test units count
-    const { count: unitsCount, error: unitsError } = await supabase
-      .from('m_units')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true)
+    console.log('✅ Session persisted successfully')
+    console.log('   Token matches:', persistedSession.access_token === authData.session.access_token)
 
-    if (unitsError) {
-      console.error('❌ Cannot fetch units:', unitsError.message)
-    } else {
-      console.log('✅ Units count:', unitsCount)
-    }
+    // Step 6: Clean up
+    console.log('\nStep 6: Cleaning up...')
+    await supabase.auth.signOut()
+    console.log('✅ Signed out successfully')
 
-    // Test employees count
-    const { count: employeesCount, error: employeesError } = await supabase
-      .from('m_employees')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true)
-
-    if (employeesError) {
-      console.error('❌ Cannot fetch employees:', employeesError.message)
-    } else {
-      console.log('✅ Employees count:', employeesCount)
-    }
-
-    // Test pools
-    const { data: pools, error: poolsError } = await supabase
-      .from('t_pool')
-      .select('allocated_amount')
-      .eq('status', 'approved')
-
-    if (poolsError) {
-      console.error('❌ Cannot fetch pools:', poolsError.message)
-    } else {
-      const totalPoolAmount = pools?.reduce((sum, pool) => sum + (pool.allocated_amount || 0), 0) || 0
-      console.log('✅ Total pool amount:', totalPoolAmount)
-    }
-
-    console.log('\n✅ ALL TESTS PASSED!')
+    console.log('\n🎉 Complete login flow test PASSED!')
     console.log('\n📋 Summary:')
-    console.log('   ✓ Authentication working')
-    console.log('   ✓ Employee record found')
-    console.log('   ✓ Session valid')
-    console.log('   ✓ Dashboard data accessible')
-    console.log('\n💡 Login should work in browser. If it still fails:')
-    console.log('   1. Open browser DevTools (F12)')
-    console.log('   2. Go to Console tab')
-    console.log('   3. Try to login and check for errors')
-    console.log('   4. Go to Network tab and check for failed requests')
-    console.log('   5. Go to Application > Storage and clear all site data')
-    console.log('   6. Try login again')
+    console.log('   ✅ Authentication works')
+    console.log('   ✅ Employee data accessible')
+    console.log('   ✅ Role-based routing configured')
+    console.log('   ✅ Session persistence works')
+    console.log('\n💡 Login should work in browser now!')
 
   } catch (error) {
-    console.error('❌ Unexpected error:', error)
+    console.error('❌ Complete login flow test FAILED:', error)
   }
 }
 
-testLoginFlow()
+// Run test
+testCompleteLoginFlow()

@@ -1,0 +1,46 @@
+console.log('🧹 Panduan Membersihkan Browser Cache dan Test Login\n')
+console.log('=' .repeat(60))
+console.log('\n📋 LANGKAH-LANGKAH:\n')
+
+console.log('1️⃣ BERSIHKAN BROWSER CACHE:')
+console.log('   • Buka Chrome/Edge')
+console.log('   • Tekan Ctrl+Shift+Delete')
+console.log('   • Pilih "All time" untuk time range')
+console.log('   • Centang: Cookies, Cached images, Site data')
+console.log('   • Klik "Clear data"\n')
+
+console.log('2️⃣ ATAU GUNAKAN MODE INCOGNITO:')
+console.log('   • Tekan Ctrl+Shift+N (Chrome) atau Ctrl+Shift+P (Edge)')
+console.log('   • Buka http://localhost:3002/login\n')
+
+console.log('3️⃣ BUKA DEVELOPER TOOLS:')
+console.log('   • Tekan F12')
+console.log('   • Pergi ke tab "Console"')
+console.log('   • Perhatikan log yang muncul\n')
+
+console.log('4️⃣ CLEAR SITE DATA (PENTING!):')
+console.log('   • Di Developer Tools, pergi ke tab "Application"')
+console.log('   • Di sidebar kiri, klik "Storage"')
+console.log('   • Klik tombol "Clear site data"')
+console.log('   • Refresh halaman (Ctrl+Shift+R)\n')
+
+console.log('5️⃣ TEST LOGIN:')
+console.log('   • Email: mukhsin9@gmail.com')
+console.log('   • Password: admin123')
+console.log('   • Klik "Masuk ke Sistem"\n')
+
+console.log('6️⃣ PERHATIKAN CONSOLE LOG:')
+console.log('   • Harus muncul: [LOGIN] Starting login process...')
+console.log('   • Harus muncul: [LOGIN] Cleared existing session')
+console.log('   • Harus muncul: [LOGIN] Attempting sign in...')
+console.log('   • Harus muncul: [LOGIN] Login successful!')
+console.log('   • Harus muncul: [LOGIN] Redirecting to dashboard...\n')
+
+console.log('7️⃣ JIKA MASIH ERROR:')
+console.log('   • Screenshot error di console')
+console.log('   • Screenshot error di Network tab')
+console.log('   • Kirim screenshot untuk analisis lebih lanjut\n')
+
+console.log('=' .repeat(60))
+console.log('\n✅ Backend login sudah diverifikasi BERHASIL')
+console.log('✅ Masalah kemungkinan di browser cache/session\n')

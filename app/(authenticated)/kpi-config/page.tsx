@@ -77,46 +77,47 @@ export default function KPIConfigPage() {
     setIsLoading(true)
     try {
       const supabase = createClient()
-      // Load categories
-      const { data: categoriesData, error: categoriesError } = await supabase
-        .from('m_kpi_categories')
-        .select('*')
-        .eq('unit_id', selectedUnit)
-        .order('category')
 
-      if (categoriesError) throw categoriesError
-      setCategories(categoriesData || [])
-
-      // Load indicators
-      const categoryIds = categoriesData?.map(c => c.id) || []
-      if (categoryIds.length > 0) {
-        const { data: indicatorsData, error: indicatorsError } = await supabase
-          .from('m_kpi_indicators')
+      // OPTIMIZED: Load all data in parallel with single query
+      const [categoriesResult, indicatorsResult, subIndicatorsResult] = await Promise.all([
+        supabase
+          .from('m_kpi_categories')
           .select('*')
-          .in('category_id', categoryIds)
+          .eq('unit_id', selectedUnit)
+          .order('category'),
+        
+        supabase
+          .from('m_kpi_indicators')
+          .select(`
+            *,
+            m_kpi_categories!m_kpi_indicators_category_id_fkey!inner (unit_id)
+          `)
+          .eq('m_kpi_categories.unit_id', selectedUnit)
+          .order('code'),
+        
+        supabase
+          .from('m_kpi_sub_indicators')
+          .select(`
+            *,
+            m_kpi_indicators!m_kpi_sub_indicators_indicator_id_fkey!inner (
+              category_id,
+              m_kpi_categories!m_kpi_indicators_category_id_fkey!inner (unit_id)
+            )
+          `)
+          .eq('m_kpi_indicators.m_kpi_categories.unit_id', selectedUnit)
           .order('code')
+      ])
 
-        if (indicatorsError) throw indicatorsError
-        setIndicators(indicatorsData || [])
+      // Check for errors
+      if (categoriesResult.error) throw categoriesResult.error
+      if (indicatorsResult.error) throw indicatorsResult.error
+      if (subIndicatorsResult.error) throw subIndicatorsResult.error
 
-        // Load sub indicators
-        const indicatorIds = indicatorsData?.map(i => i.id) || []
-        if (indicatorIds.length > 0) {
-          const { data: subIndicatorsData, error: subIndicatorsError } = await supabase
-            .from('m_kpi_sub_indicators')
-            .select('*')
-            .in('indicator_id', indicatorIds)
-            .order('code')
+      // Set all data at once to minimize re-renders
+      setCategories(categoriesResult.data || [])
+      setIndicators(indicatorsResult.data || [])
+      setSubIndicators(subIndicatorsResult.data || [])
 
-          if (subIndicatorsError) throw subIndicatorsError
-          setSubIndicators(subIndicatorsData || [])
-        } else {
-          setSubIndicators([])
-        }
-      } else {
-        setIndicators([])
-        setSubIndicators([])
-      }
     } catch (error: any) {
       console.error('Error loading KPI structure:', error)
       setError(`Gagal memuat struktur KPI: ${error.message}`)

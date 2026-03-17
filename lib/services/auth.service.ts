@@ -70,51 +70,17 @@ class AuthService {
       }
 
       console.log('[AUTH] Sign in successful, user ID:', authData.user.id)
-
-      // Check both user_metadata and raw_user_meta_data for role
-      const role = (authData.user.user_metadata?.role || authData.user.raw_user_meta_data?.role) as string
-      
-      if (!role) {
-        console.error('[AUTH] Role not found in metadata')
-        console.error('[AUTH] user_metadata:', authData.user.user_metadata)
-        console.error('[AUTH] raw_user_meta_data:', authData.user.raw_user_meta_data)
-        logAuthError('user-fetch', new Error('Role not found in user metadata'))
-        await supabase.auth.signOut()
-        return {
-          success: false,
-          error: 'Data pengguna tidak ditemukan',
-        }
-      }
-
-      console.log('[AUTH] User role:', role)
       console.log('[AUTH] Fetching employee data...')
 
-      // Try to fetch employee data with retry logic
-      let employeeData = null
-      let employeeError = null
-      
-      for (let attempt = 0; attempt < 3; attempt++) {
-        // Use maybeSingle() to avoid PGRST116 error
-        const result = await supabase
-          .from('m_employees')
-          .select('id, full_name, unit_id, is_active')
-          .eq('user_id', authData.user.id)
-          .limit(1)
-          .maybeSingle()
-        
-        employeeData = result.data
-        employeeError = result.error
-        
-        if (employeeData) break
-        
-        if (attempt < 2) {
-          console.warn(`[AUTH] Employee fetch attempt ${attempt + 1} failed, retrying...`)
-          await new Promise(resolve => setTimeout(resolve, 300))
-        }
-      }
+      // Fetch employee data first - this contains the role and other info
+      const { data: employeeData, error: employeeError } = await supabase
+        .from('m_employees')
+        .select('id, full_name, unit_id, is_active, role')
+        .eq('user_id', authData.user.id)
+        .single()
 
       if (employeeError) {
-        console.error('[AUTH] Employee fetch error after retries:', employeeError)
+        console.error('[AUTH] Employee fetch error:', employeeError)
         logAuthError('employee-fetch', employeeError)
         await supabase.auth.signOut()
         return {
@@ -131,6 +97,24 @@ class AuthService {
           error: 'Data pegawai tidak ditemukan',
         }
       }
+
+      // Get role from employee data (primary source) or fallback to metadata
+      const role = employeeData.role || 
+                   authData.user.user_metadata?.role
+      
+      if (!role) {
+        console.error('[AUTH] Role not found in employee data or metadata')
+        console.error('[AUTH] Employee role:', employeeData.role)
+        console.error('[AUTH] user_metadata:', authData.user.user_metadata)
+        logAuthError('user-fetch', new Error('Role not found'))
+        await supabase.auth.signOut()
+        return {
+          success: false,
+          error: 'Data pengguna tidak ditemukan',
+        }
+      }
+
+      console.log('[AUTH] User role:', role)
 
       console.log('[AUTH] Employee data found:', {
         id: employeeData.id,
@@ -160,7 +144,7 @@ class AuthService {
 
       return {
         success: true,
-        user: userDataResult,
+        user: userDataResult
       }
     } catch (error: any) {
       console.error('[AUTH] Exception during sign in:', error)
@@ -264,7 +248,8 @@ class AuthService {
   }
 
   async logout(): Promise<void> {
-    return this.signOut()
+    const { handleLogout } = await import('@/lib/utils/logout-handler')
+    await handleLogout()
   }
 
   async getCurrentUser(): Promise<UserData | null> {
@@ -277,19 +262,22 @@ class AuthService {
         return null
       }
 
-      const role = session.user.user_metadata?.role as string
-      
-      if (!role) {
-        return null
-      }
-
+      // Fetch employee data to get role and other info
       const { data: employeeData, error } = await supabase
         .from('m_employees')
-        .select('id, full_name, unit_id, is_active')
+        .select('id, full_name, unit_id, is_active, role')
         .eq('user_id', session.user.id)
         .single()
 
       if (error || !employeeData) {
+        return null
+      }
+
+      // Get role from employee data (primary source) or fallback to metadata
+      const role = employeeData.role || 
+                   session.user.user_metadata?.role
+      
+      if (!role) {
         return null
       }
 
@@ -328,8 +316,20 @@ class AuthService {
         return null
       }
 
-      const metadata = user.user_metadata as UserMetadata
-      return metadata.role as UserRole
+      // First try to get role from employee data
+      const { data: employeeData } = await supabase
+        .from('m_employees')
+        .select('role')
+        .eq('user_id', userId)
+        .single()
+
+      if (employeeData?.role) {
+        return employeeData.role as UserRole
+      }
+
+      // Fallback to metadata
+      const role = user.user_metadata?.role
+      return role as UserRole
     } catch (error) {
       logAuthError('getUserRole', error)
       return null
@@ -357,19 +357,21 @@ class AuthService {
         return null
       }
 
-      const role = session.user.user_metadata?.role as string
-      
-      if (!role) {
-        return null
-      }
-
       const { data: employeeData, error: employeeError } = await supabase
         .from('m_employees')
-        .select('id, employee_code, full_name, unit_id, tax_status, is_active, created_at, updated_at')
+        .select('id, employee_code, full_name, unit_id, tax_status, is_active, role, created_at, updated_at')
         .eq('user_id', session.user.id)
         .single()
 
       if (employeeError || !employeeData) {
+        return null
+      }
+
+      // Get role from employee data (primary source) or fallback to metadata
+      const role = employeeData.role || 
+                   session.user.user_metadata?.role
+      
+      if (!role) {
         return null
       }
 

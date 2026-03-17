@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ChevronDown, ChevronRight, Edit, Trash2, Plus, Layers } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { KPICategory, KPIIndicator, KPISubIndicator } from '@/lib/types/kpi.types'
@@ -35,19 +35,27 @@ export default function KPITree({
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
   const [expandedIndicators, setExpandedIndicators] = useState<Set<string>>(new Set())
 
-  // Update expanded categories when categories change
-  useEffect(() => {
-    setExpandedCategories(new Set(categories.map(c => c.id)))
-  }, [categories])
+  // OPTIMIZED: Memoize expanded states to prevent unnecessary re-renders
+  const expandedCategoryIds = useMemo(() => 
+    new Set(categories.map(c => c.id)), 
+    [categories]
+  )
 
-  // Update expanded indicators when data changes - auto-expand indicators with sub indicators
-  useEffect(() => {
+  const expandedIndicatorIds = useMemo(() => {
     const indicatorsWithSubs = indicators.filter(indicator => 
       subIndicators.some(sub => sub.indicator_id === indicator.id)
     )
-    // Force expand all indicators with sub indicators
-    setExpandedIndicators(new Set(indicatorsWithSubs.map(i => i.id)))
+    return new Set(indicatorsWithSubs.map(i => i.id))
   }, [indicators, subIndicators])
+
+  // Update state only when memoized values change
+  useEffect(() => {
+    setExpandedCategories(expandedCategoryIds)
+  }, [expandedCategoryIds])
+
+  useEffect(() => {
+    setExpandedIndicators(expandedIndicatorIds)
+  }, [expandedIndicatorIds])
 
   function toggleCategory(categoryId: string) {
     const newExpanded = new Set(expandedCategories)

@@ -55,13 +55,13 @@ export default function AssessmentReports({ availablePeriods: propAvailablePerio
   const [selectedUnit, setSelectedUnit] = useState<string>('all')
   const [reportData, setReportData] = useState<AssessmentReport | null>(null)
   const [periodComparison, setPeriodComparison] = useState<PeriodComparison | null>(null)
-  const [availablePeriods, setAvailablePeriods] = useState<string[]>(propAvailablePeriods || [])
+  const [periods, setPeriods] = useState<string[]>(propAvailablePeriods || [])
   const [availableUnits, setAvailableUnits] = useState<Array<{ id: string; name: string }>>([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (propAvailablePeriods && propAvailablePeriods.length > 0) {
-      setAvailablePeriods(propAvailablePeriods)
+      setPeriods(propAvailablePeriods)
       if (!selectedPeriod && propAvailablePeriods.length > 0) {
         setSelectedPeriod(propAvailablePeriods[0])
       }
@@ -83,7 +83,7 @@ export default function AssessmentReports({ availablePeriods: propAvailablePerio
       const response = await fetch('/api/assessment/reports?action=periods')
       const data = await response.json()
       if (data.success) {
-        setAvailablePeriods(data.periods)
+        setPeriods(data.periods)
         if (data.periods.length > 0) {
           setSelectedPeriod(data.periods[0])
         }
@@ -220,7 +220,7 @@ export default function AssessmentReports({ availablePeriods: propAvailablePerio
               <SelectValue placeholder="Pilih periode" />
             </SelectTrigger>
             <SelectContent>
-              {availablePeriods.map((period) => (
+              {periods.map((period) => (
                 <SelectItem key={period} value={period}>
                   {period}
                 </SelectItem>

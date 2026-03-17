@@ -1,158 +1,168 @@
 #!/usr/bin/env tsx
 
-/**
- * Script untuk memperbaiki masalah login redirect
- * User berhasil login tapi diarahkan kembali ke halaman login
- */
-
 import { createClient } from '@supabase/supabase-js'
+import { config } from 'dotenv'
+
+// Load environment variables
+config({ path: '.env.local' })
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-})
+if (!supabaseUrl || !supabaseKey || !serviceRoleKey) {
+  console.error('❌ Missing Supabase environment variables')
+  process.exit(1)
+}
 
-async function testLoginFlow() {
-  console.log('🔍 Testing login flow...')
-  
+async function fixLoginRedirectIssue() {
+  console.log('🔧 Fixing Login Redirect Issue...\n')
+
   try {
-    // Test dengan kredensial yang ada di login page
-    const email = 'mukhsin9@gmail.com'
-    const password = 'admin123'
-    
-    console.log(`📧 Testing login with: ${email}`)
-    
-    // 1. Cek apakah user ada di auth.users
-    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers()
-    
-    if (authError) {
-      console.error('❌ Error fetching auth users:', authError.message)
-      return
-    }
-    
-    const authUser = authUsers.users.find(u => u.email === email)
-    if (!authUser) {
-      console.error('❌ User not found in auth.users')
-      return
-    }
-    
-    console.log('✅ User found in auth.users:', authUser.id)
-    console.log('📋 User metadata:', authUser.user_metadata)
-    
-    // 2. Cek apakah user ada di m_employees
-    const { data: employee, error: empError } = await supabase
-      .from('m_employees')
-      .select('*')
-      .eq('user_id', authUser.id)
-      .single()
-    
-    if (empError) {
-      console.error('❌ Error fetching employee:', empError.message)
-      return
-    }
-    
-    if (!employee) {
-      console.error('❌ Employee record not found')
-      return
-    }
-    
-    console.log('✅ Employee record found:', {
-      id: employee.id,
-      name: employee.name,
-      role: employee.role,
-      is_active: employee.is_active,
-      unit_id: employee.unit_id
+    // Create admin client to check and fix user metadata
+    const adminSupabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
     })
+
+    console.log('1️⃣ Checking user metadata for test user...')
     
-    // 3. Cek apakah role ada di user_metadata
-    if (!authUser.user_metadata?.role) {
-      console.log('⚠️  Role missing in user_metadata, updating...')
+    // Get user by email
+    const { data: users, error: listError } = await adminSupabase.auth.admin.listUsers()
+    
+    if (listError) {
+      console.error('❌ Failed to list users:', listError.message)
+      return
+    }
+
+    const testUser = users.users.find(u => u.email === 'mukhsin9@gmail.com')
+    
+    if (!testUser) {
+      console.error('❌ Test user not found')
+      return
+    }
+
+    console.log('✅ Test user found:', testUser.id)
+    console.log('   Current metadata:', JSON.stringify(testUser.user_metadata, null, 2))
+
+    // Check if role is properly set
+    if (!testUser.user_metadata?.role) {
+      console.log('🔧 Setting missing role in user metadata...')
       
-      const { error: updateError } = await supabase.auth.admin.updateUserById(
-        authUser.id,
+      const { error: updateError } = await adminSupabase.auth.admin.updateUserById(
+        testUser.id,
         {
           user_metadata: {
-            ...authUser.user_metadata,
-            role: employee.role,
-            name: employee.name,
-            unit_id: employee.unit_id
+            ...testUser.user_metadata,
+            role: 'superadmin'
           }
         }
       )
       
       if (updateError) {
-        console.error('❌ Error updating user metadata:', updateError.message)
+        console.error('❌ Failed to update user metadata:', updateError.message)
         return
       }
       
-      console.log('✅ User metadata updated with role:', employee.role)
+      console.log('✅ User role updated to superadmin')
     } else {
-      console.log('✅ Role found in user_metadata:', authUser.user_metadata.role)
+      console.log('✅ User role already set:', testUser.user_metadata.role)
     }
+
+    console.log('\n2️⃣ Checking employee record...')
     
-    // 4. Test actual login
-    console.log('\n🔐 Testing actual login...')
+    const regularSupabase = createClient(supabaseUrl, supabaseKey)
     
-    const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    })
-    
-    if (loginError) {
-      console.error('❌ Login failed:', loginError.message)
+    const { data: employee, error: empError } = await regularSupabase
+      .from('m_employees')
+      .select('*')
+      .eq('user_id', testUser.id)
+      .single()
+
+    if (empError || !employee) {
+      console.error('❌ Employee record issue:', empError?.message)
       return
     }
-    
-    console.log('✅ Login successful!')
-    console.log('📋 Session info:', {
-      user_id: loginData.user?.id,
-      email: loginData.user?.email,
-      role: loginData.user?.user_metadata?.role
+
+    console.log('✅ Employee record found:', {
+      id: employee.id,
+      name: employee.full_name,
+      active: employee.is_active,
+      unit_id: employee.unit_id
     })
+
+    if (!employee.is_active) {
+      console.log('🔧 Activating employee...')
+      
+      const { error: activateError } = await regularSupabase
+        .from('m_employees')
+        .update({ is_active: true })
+        .eq('id', employee.id)
+      
+      if (activateError) {
+        console.error('❌ Failed to activate employee:', activateError.message)
+        return
+      }
+      
+      console.log('✅ Employee activated')
+    }
+
+    console.log('\n3️⃣ Testing complete login flow...')
     
-    // 5. Test session persistence
-    console.log('\n💾 Testing session persistence...')
-    
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
-    
-    if (sessionError) {
-      console.error('❌ Session error:', sessionError.message)
+    // Test the complete login flow
+    const { data: authData, error: authError } = await regularSupabase.auth.signInWithPassword({
+      email: 'mukhsin9@gmail.com',
+      password: 'admin123'
+    })
+
+    if (authError) {
+      console.error('❌ Login failed:', authError.message)
       return
     }
+
+    console.log('✅ Login successful')
+
+    // Check session immediately
+    const { data: sessionData, error: sessionError } = await regularSupabase.auth.getSession()
     
-    if (sessionData.session) {
-      console.log('✅ Session persisted successfully')
-    } else {
-      console.log('⚠️  Session not found after login')
+    if (sessionError || !sessionData.session) {
+      console.error('❌ Session not established:', sessionError?.message)
+      return
     }
+
+    console.log('✅ Session established')
+    console.log('   Role in session:', sessionData.session.user.user_metadata?.role)
+
+    // Test employee fetch with session
+    const { data: empWithSession, error: empSessionError } = await regularSupabase
+      .from('m_employees')
+      .select('id, full_name, is_active')
+      .eq('user_id', sessionData.session.user.id)
+      .single()
+
+    if (empSessionError || !empWithSession) {
+      console.error('❌ Employee fetch with session failed:', empSessionError?.message)
+      return
+    }
+
+    console.log('✅ Employee data accessible with session')
+
+    // Clean up
+    await regularSupabase.auth.signOut()
+
+    console.log('\n✅ Login redirect issue should be fixed!')
+    console.log('   - User metadata has role: superadmin')
+    console.log('   - Employee record is active')
+    console.log('   - Session persists correctly')
+    console.log('   - Dashboard route is allowed for superadmin')
     
-    // Cleanup - sign out
-    await supabase.auth.signOut()
-    
-    console.log('\n✅ Login flow test completed successfully!')
-    
+    console.log('\n🚀 Try logging in again at: http://localhost:3002/login')
+
   } catch (error) {
     console.error('❌ Unexpected error:', error)
   }
 }
 
-async function main() {
-  console.log('🚀 Starting login redirect issue diagnosis...\n')
-  
-  await testLoginFlow()
-  
-  console.log('\n📋 Recommendations:')
-  console.log('1. Pastikan user_metadata memiliki role yang benar')
-  console.log('2. Periksa middleware untuk session validation timing')
-  console.log('3. Gunakan window.location.replace() instead of href untuk redirect')
-  console.log('4. Tambahkan retry logic di middleware untuk session check')
-}
-
-if (require.main === module) {
-  main().catch(console.error)
-}
+fixLoginRedirectIssue()

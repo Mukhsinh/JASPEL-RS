@@ -49,58 +49,18 @@ export async function calculateIndividualScores(period: string) {
   
   const results = []
   
-  for (const employee of employees!) {
-    // First, try to get assessment data for this employee in this period
-    const { data: assessments, error: assessError } = await supabase
-      .from('t_kpi_assessments')
-      .select(`
-        id,
-        realization_value,
-        indicator_id,
-        target_value,
-        weight_percentage,
-        achievement_percentage,
-        score,
-        m_kpi_indicators!inner (
-          category_id,
-          m_kpi_categories!inner (
-            category,
-            unit_id
-          )
-        )
-      `)
-      .eq('employee_id', employee.id)
-      .eq('period', period)
-    
-    if (assessError) throw assessError
-    
-    // If no assessments found, fallback to realization data
+  // Use batch query to eliminate N+1 problem
+  const { dataFetcher } = await import('@/lib/utils/data-fetcher')
+  const employeesWithKPIData = await dataFetcher.getEmployeesWithKPIData(unitId, period)
+  
+  for (const employee of employeesWithKPIData) {
+    // Process assessment data (preferred) or fallback to realization data
     let dataSource = 'assessment'
-    let employeeData: any[] = assessments || []
+    let employeeData: any[] = employee.t_kpi_assessments || []
     
-    if (!assessments || assessments.length === 0) {
+    if (!employeeData || employeeData.length === 0) {
       dataSource = 'realization'
-      const { data: realizations, error: realError } = await supabase
-        .from('t_realization')
-        .select(`
-          id,
-          realization_value,
-          indicator_id,
-          m_kpi_indicators!inner (
-            target_value,
-            weight_percentage,
-            category_id,
-            m_kpi_categories!inner (
-              category,
-              unit_id
-            )
-          )
-        `)
-        .eq('employee_id', employee.id)
-        .eq('period', period)
-      
-      if (realError) throw realError
-      employeeData = realizations || []
+      employeeData = employee.t_realization || []
     }
     
     // Group by category (P1, P2, P3)

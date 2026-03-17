@@ -11,6 +11,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ count: 0, data: [] })
     }
 
+    // Get employee record first
+    const { data: employee } = await supabase
+      .from('m_employees')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (!employee) {
+      return NextResponse.json({ count: 0, data: [] })
+    }
+
     const searchParams = request.nextUrl.searchParams
     const unreadOnly = searchParams.get('unreadOnly') === 'true'
 
@@ -24,7 +35,7 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-      const { data, error } = await getNotifications(user.id, supabase)
+      const { data, error } = await getNotifications(employee.id, supabase)
       return NextResponse.json(error ? [] : data)
     } catch (error: any) {
       return NextResponse.json([])

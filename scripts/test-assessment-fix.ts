@@ -1,97 +1,73 @@
-import { createClient } from '@supabase/supabase-js'
-import dotenv from 'dotenv'
+#!/usr/bin/env tsx
 
-dotenv.config({ path: '.env.local' })
+console.log('🔧 Testing Assessment Fix...')
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+// Start the development server and test the assessment page
+import { spawn } from 'child_process'
 
-async function testAssessmentFix() {
-  console.log('🧪 Testing Assessment Page Fixes...\n')
+const server = spawn('npm', ['run', 'dev'], {
+  stdio: 'pipe',
+  shell: true
+})
+
+let serverReady = false
+
+server.stdout?.on('data', (data) => {
+  const output = data.toString()
+  console.log('Server:', output.trim())
   
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
-  
-  try {
-    // Test 1: Check if m_kpi_sub_indicators table is accessible
-    console.log('1. Testing m_kpi_sub_indicators table access...')
-    const { data: subIndicators, error: subError } = await supabase
-      .from('m_kpi_sub_indicators')
-      .select('id, code, name')
-      .limit(5)
+  if (output.includes('Ready') || output.includes('localhost:3000')) {
+    serverReady = true
+    console.log('✅ Server is ready!')
     
-    if (subError) {
-      console.log('❌ Sub indicators error:', subError.message)
-    } else {
-      console.log('✅ Sub indicators accessible:', subIndicators?.length || 0, 'records')
-    }
-    
-    // Test 2: Check v_assessment_status view
-    console.log('\n2. Testing v_assessment_status view...')
-    const { data: statusView, error: statusError } = await supabase
-      .from('v_assessment_status')
-      .select('employee_id, full_name, status')
-      .limit(5)
-    
-    if (statusError) {
-      console.log('❌ Assessment status error:', statusError.message)
-    } else {
-      console.log('✅ Assessment status accessible:', statusView?.length || 0, 'records')
-    }
-    
-    // Test 3: Check can_assess_employee function
-    console.log('\n3. Testing can_assess_employee function...')
-    
-    // Get a sample employee ID
-    const { data: employees } = await supabase
-      .from('m_employees')
-      .select('id')
-      .limit(1)
-    
-    if (employees && employees.length > 0) {
-      const { data: canAssess, error: functionError } = await supabase
-        .rpc('can_assess_employee', { employee_uuid: employees[0].id })
-      
-      if (functionError) {
-        console.log('❌ Function error:', functionError.message)
-      } else {
-        console.log('✅ Function accessible, result:', canAssess)
+    // Test the assessment API after server is ready
+    setTimeout(async () => {
+      try {
+        console.log('\n🧪 Testing assessment API...')
+        
+        const response = await fetch('http://localhost:3000/api/assessment/employees?period=2026-01', {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+        
+        console.log('Response status:', response.status)
+        
+        if (response.ok) {
+          const data = await response.json()
+          console.log('✅ API Response:', data)
+        } else {
+          const error = await response.text()
+          console.log('❌ API Error:', error)
+        }
+        
+      } catch (error) {
+        console.error('❌ Test failed:', error)
+      } finally {
+        console.log('\n🛑 Stopping server...')
+        server.kill()
+        process.exit(0)
       }
-    }
-    
-    // Test 4: Test API endpoints simulation
-    console.log('\n4. Testing API endpoint queries...')
-    
-    // Simulate what the API does - get current period
-    const { data: periods } = await supabase
-      .from('t_pool')
-      .select('period')
-      .in('status', ['approved', 'distributed'])
-      .order('period', { ascending: false })
-      .limit(1)
-    
-    if (periods && periods.length > 0) {
-      const currentPeriod = periods[0].period
-      console.log('✅ Current period:', currentPeriod)
-      
-      // Test assessment status for period
-      const { data: statusData, error: periodError } = await supabase
-        .from('v_assessment_status')
-        .select('*')
-        .eq('period', currentPeriod)
-        .limit(3)
-      
-      if (periodError) {
-        console.log('❌ Period status error:', periodError.message)
-      } else {
-        console.log('✅ Period status data:', statusData?.length || 0, 'records')
-      }
-    }
-    
-    console.log('\n✅ Assessment fix test completed!')
-    
-  } catch (error) {
-    console.error('❌ Test failed:', error)
+    }, 3000)
   }
-}
+})
 
-testAssessmentFix()
+server.stderr?.on('data', (data) => {
+  const output = data.toString()
+  if (!output.includes('warn') && !output.includes('Duplicate atom key')) {
+    console.error('Server Error:', output.trim())
+  }
+})
+
+server.on('close', (code) => {
+  console.log(`Server process exited with code ${code}`)
+})
+
+// Timeout after 30 seconds
+setTimeout(() => {
+  if (!serverReady) {
+    console.log('❌ Server failed to start within 30 seconds')
+    server.kill()
+    process.exit(1)
+  }
+}, 30000)

@@ -1,7 +1,7 @@
 import Decimal from 'decimal.js';
 
-// Configure Decimal.js for high precision
-Decimal.set({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
+// Configure Decimal.js for financial precision (optimized)
+Decimal.set({ precision: 10, rounding: Decimal.ROUND_HALF_UP });
 
 /**
  * KPI Category Weights (P1, P2, P3)

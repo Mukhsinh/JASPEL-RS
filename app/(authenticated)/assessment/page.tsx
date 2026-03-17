@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import AssessmentPageContent from '@/components/assessment/AssessmentPageContent'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 // Import function secara langsung untuk menghindari module resolution issue
 async function getAvailablePeriods(): Promise<string[]> {
   try {

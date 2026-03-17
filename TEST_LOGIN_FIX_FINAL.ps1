@@ -1,35 +1,32 @@
-Write-Host "🚀 Starting JASPEL System - Login Fix Test" -ForegroundColor Cyan
-Write-Host "=" * 60 -ForegroundColor Cyan
-Write-Host ""
+#!/usr/bin/env pwsh
 
-# Kill any existing Next.js processes
-Write-Host "🔄 Stopping existing processes..." -ForegroundColor Yellow
-Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*node_modules*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+Write-Host "🔧 Testing Login Fix - Final" -ForegroundColor Cyan
+Write-Host "================================" -ForegroundColor Cyan
+
+# Stop any running dev server
+Write-Host "🛑 Stopping any running dev server..." -ForegroundColor Yellow
+Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*next*dev*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+
+# Wait a moment
 Start-Sleep -Seconds 2
 
-# Clear Next.js cache
-Write-Host "🧹 Clearing cache..." -ForegroundColor Yellow
-if (Test-Path ".next") {
-    Remove-Item -Recurse -Force ".next" -ErrorAction SilentlyContinue
+# Run the login fix test
+Write-Host "🧪 Running login fix test..." -ForegroundColor Yellow
+npx tsx scripts/test-login-fix-final.ts
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "❌ Login test failed!" -ForegroundColor Red
+    exit 1
 }
-Start-Sleep -Seconds 1
 
-# Start development server
-Write-Host ""
-Write-Host "🌐 Starting development server..." -ForegroundColor Green
-Write-Host "   URL: http://localhost:3002" -ForegroundColor White
-Write-Host ""
-Write-Host "📝 Test Credentials:" -ForegroundColor Cyan
-Write-Host "   Email: mukhsin9@gmail.com" -ForegroundColor White
-Write-Host "   Password: admin123" -ForegroundColor White
-Write-Host ""
-Write-Host "✅ What to check:" -ForegroundColor Yellow
-Write-Host "   1. No console errors" -ForegroundColor White
-Write-Host "   2. Login button works" -ForegroundColor White
-Write-Host "   3. Redirects to /admin/dashboard" -ForegroundColor White
-Write-Host "   4. Dashboard loads successfully" -ForegroundColor White
-Write-Host ""
+Write-Host "✅ Login test passed!" -ForegroundColor Green
+
+# Start the development server
+Write-Host "🚀 Starting development server..." -ForegroundColor Yellow
+Write-Host "📱 Open browser to: http://localhost:3003" -ForegroundColor Cyan
+Write-Host "📧 Test login with: mukhsin9@gmail.com / admin123" -ForegroundColor Cyan
+Write-Host "" -ForegroundColor White
 Write-Host "Press Ctrl+C to stop the server" -ForegroundColor Gray
-Write-Host ""
 
+# Start the server
 npm run dev

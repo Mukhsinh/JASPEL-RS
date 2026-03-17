@@ -1,113 +1,91 @@
+#!/usr/bin/env tsx
+
+import { config } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
-import * as dotenv from 'dotenv'
-import * as path from 'path'
 
 // Load environment variables
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
+config({ path: '.env.local' })
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
-async function diagnoseLogin() {
-  console.log('🔍 Diagnosing login issue...\n')
-
+async function diagnoseLoginIssue() {
+  console.log('🔍 Diagnosing login issue...')
+  
+  // Test 1: Basic connection
+  console.log('\n1. Testing Supabase connection...')
   const supabase = createClient(supabaseUrl, supabaseKey)
-
+  
   try {
-    // Test 1: Try to sign in
-    console.log('1️⃣ Testing sign in with password...')
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: 'mukhsin9@gmail.com',
-      password: 'admin123',
-    })
-
-    if (authError) {
-      console.error('❌ Sign in failed:', authError.message)
-      return
-    }
-
-    if (!authData.user) {
-      console.error('❌ No user returned from sign in')
-      return
-    }
-
-    console.log('✅ Sign in successful')
-    console.log('   User ID:', authData.user.id)
-    console.log('   Email:', authData.user.email)
-    console.log('   Role from metadata:', authData.user.user_metadata?.role)
-
-    // Test 2: Check employee record
-    console.log('\n2️⃣ Checking employee record...')
-    const { data: employeeData, error: employeeError } = await supabase
-      .from('m_employees')
-      .select('id, full_name, unit_id, is_active')
-      .eq('user_id', authData.user.id)
-      .maybeSingle()
-
-    if (employeeError) {
-      console.error('❌ Employee fetch error:', employeeError.message)
-      return
-    }
-
-    if (!employeeData) {
-      console.error('❌ No employee record found')
-      return
-    }
-
-    console.log('✅ Employee record found')
-    console.log('   Employee ID:', employeeData.id)
-    console.log('   Full Name:', employeeData.full_name)
-    console.log('   Unit ID:', employeeData.unit_id)
-    console.log('   Is Active:', employeeData.is_active)
-
-    // Test 3: Check session
-    console.log('\n3️⃣ Checking session...')
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-
-    if (sessionError) {
-      console.error('❌ Session error:', sessionError.message)
-      return
-    }
-
-    if (!session) {
-      console.error('❌ No session found')
-      return
-    }
-
-    console.log('✅ Session is valid')
-    console.log('   Access token exists:', !!session.access_token)
-    console.log('   Refresh token exists:', !!session.refresh_token)
-    console.log('   Expires at:', new Date(session.expires_at! * 1000).toLocaleString())
-
-    // Test 4: Check if user can access protected data
-    console.log('\n4️⃣ Testing access to protected data...')
-    const { data: units, error: unitsError } = await supabase
-      .from('m_units')
-      .select('id, name')
-      .limit(1)
-
-    if (unitsError) {
-      console.error('❌ Cannot access units:', unitsError.message)
+    const { data, error } = await supabase.from('m_employees').select('count').limit(1)
+    if (error) {
+      console.error('❌ Connection failed:', error.message)
     } else {
-      console.log('✅ Can access protected data')
-      console.log('   Sample unit:', units?.[0])
+      console.log('✅ Connection successful')
     }
-
-    console.log('\n✅ All tests passed! Login should work.')
-    console.log('\n📋 Summary:')
-    console.log('   - Authentication: Working')
-    console.log('   - Employee record: Found and active')
-    console.log('   - Session: Valid')
-    console.log('   - Data access: Working')
-    console.log('\n💡 If login still fails in browser, check:')
-    console.log('   1. Browser console for JavaScript errors')
-    console.log('   2. Network tab for failed requests')
-    console.log('   3. Browser storage (localStorage/sessionStorage)')
-    console.log('   4. Try clearing browser cache and cookies')
-
-  } catch (error) {
-    console.error('❌ Unexpected error:', error)
+  } catch (err) {
+    console.error('❌ Connection error:', err)
+  }
+  
+  // Test 2: Check if test user exists
+  console.log('\n2. Checking test user...')
+  const adminSupabase = createClient(supabaseUrl, serviceRoleKey)
+  
+  try {
+    const { data: authUser, error: authError } = await adminSupabase.auth.admin.listUsers()
+    if (authError) {
+      console.error('❌ Failed to list users:', authError.message)
+      return
+    }
+    
+    const testUser = authUser.users.find(u => u.email === 'mukhsin9@gmail.com')
+    if (!testUser) {
+      console.log('❌ Test user not found in auth.users')
+      return
+    }
+    
+    console.log('✅ Test user found in auth:', testUser.id)
+    console.log('   - Email confirmed:', testUser.email_confirmed_at ? 'Yes' : 'No')
+    console.log('   - User metadata:', JSON.stringify(testUser.user_metadata, null, 2))
+    
+    // Test 3: Check employee record
+    console.log('\n3. Checking employee record...')
+    const { data: employee, error: empError } = await adminSupabase
+      .from('m_employees')
+      .select('*')
+      .eq('user_id', testUser.id)
+      .single()
+    
+    if (empError) {
+      console.error('❌ Employee record not found:', empError.message)
+    } else {
+      console.log('✅ Employee record found:')
+      console.log('   - ID:', employee.id)
+      console.log('   - Name:', employee.full_name)
+      console.log('   - Active:', employee.is_active)
+      console.log('   - Role:', employee.role)
+    }
+    
+    // Test 4: Try login
+    console.log('\n4. Testing login...')
+    const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+      email: 'mukhsin9@gmail.com',
+      password: 'admin123'
+    })
+    
+    if (loginError) {
+      console.error('❌ Login failed:', loginError.message)
+    } else {
+      console.log('✅ Login successful')
+      console.log('   - User ID:', loginData.user?.id)
+      console.log('   - Session exists:', !!loginData.session)
+      console.log('   - Access token length:', loginData.session?.access_token?.length || 0)
+    }
+    
+  } catch (err) {
+    console.error('❌ Diagnosis error:', err)
   }
 }
 
-diagnoseLogin()
+diagnoseLoginIssue().catch(console.error)

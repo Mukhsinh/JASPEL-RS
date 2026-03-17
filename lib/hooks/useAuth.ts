@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { type Role, hasPermission, type Permission, getMenuItemsForRole, type MenuItem } from '@/lib/services/rbac.service'
 
@@ -12,83 +12,164 @@ export interface User {
   unit_id?: string
 }
 
+// OPTIMIZED: Simple in-memory cache with automatic cleanup
+class UserCache {
+  private cache: User | null = null
+  private timestamp = 0
+  private readonly TTL = 30000 // 30 seconds
+
+  get(): User | null {
+    if (!this.cache || Date.now() - this.timestamp > this.TTL) {
+      this.clear()
+      return null
+    }
+    return this.cache
+  }
+
+  set(user: User): void {
+    this.cache = user
+    this.timestamp = Date.now()
+  }
+
+  clear(): void {
+    this.cache = null
+    this.timestamp = 0
+  }
+}
+
+const userCache = new UserCache()
+
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<User | null>(userCache.get())
+  const [loading, setLoading] = useState(!userCache.get())
+  const fetchingRef = useRef(false)
+  const mountedRef = useRef(true)
 
-  useEffect(() => {
-    let mounted = true
-    const supabase = createClient()
-
-    const resolveUser = async (sessionUser: any) => {
-      try {
-        if (!sessionUser) {
-          if (mounted) {
-            setUser(null)
-            setLoading(false)
-          }
-          return
-        }
-
-        const role = (sessionUser.user_metadata?.role || 'employee') as Role
-        let fullName = sessionUser.user_metadata?.full_name || sessionUser.email
-        let unitId: string | undefined
-
-        try {
-          // Timeout the fetch after 3 seconds to guarantee it doesn't hang
-          const getEmployeeTask = supabase
-            .from('m_employees')
-            .select('id, full_name, unit_id')
-            .eq('user_id', sessionUser.id)
-            .single()
-
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Profile fetch timeout')), 3000)
-          )
-
-          const { data, error } = await Promise.race([getEmployeeTask, timeoutPromise]) as any
-
-          if (data && !error) {
-            fullName = data.full_name || fullName
-            unitId = data.unit_id
-          }
-        } catch (err) {
-          console.warn('[useAuth] Failed to fetch employee metadata (non-critical).', err)
-        }
-
-        if (mounted) {
-          setUser({
-            id: sessionUser.id,
-            email: sessionUser.email,
-            role,
-            full_name: fullName,
-            unit_id: unitId,
-          })
-          setLoading(false)
-        }
-      } catch (fatalError) {
-        console.error('[useAuth] Fatal error resolving user:', fatalError)
-        if (mounted) setLoading(false)
-      }
+  // OPTIMIZED: Memoized load function
+  const loadUser = useCallback(async () => {
+    // Prevent multiple simultaneous fetches
+    if (fetchingRef.current) {
+      return
     }
 
-    // 1. Get immediate session from cache (no network lock contention)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      resolveUser(session?.user)
-    }).catch(() => {
-      if (mounted) setLoading(false)
-    })
+    // Check cache first
+    const cachedUser = userCache.get()
+    if (cachedUser) {
+      if (mountedRef.current) {
+        setUser(cachedUser)
+        setLoading(false)
+      }
+      return
+    }
 
-    // 2. Listen to changes securely
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      resolveUser(session?.user)
+    fetchingRef.current = true
+    
+    try {
+      const supabase = createClient()
+      
+      // Get session with timeout
+      const sessionPromise = supabase.auth.getSession()
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Session timeout')), 5000)
+      )
+
+      const { data: { session }, error: sessionError } = await Promise.race([
+        sessionPromise,
+        timeoutPromise
+      ]) as any
+      
+      if (sessionError || !session?.user) {
+        userCache.clear()
+        if (mountedRef.current) {
+          setUser(null)
+          setLoading(false)
+        }
+        return
+      }
+
+      const sessionUser = session.user
+      const role = (sessionUser.user_metadata?.role || 'employee') as Role
+        
+      // Try to get employee data with timeout
+      let fullName = sessionUser.user_metadata?.full_name || sessionUser.email
+      let unitId: string | undefined
+
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 3000)
+        
+        const { data: employeeData } = await supabase
+          .from('m_employees')
+          .select('full_name, unit_id')
+          .eq('user_id', sessionUser.id)
+          .abortSignal(controller.signal)
+          .maybeSingle()
+        
+        clearTimeout(timeoutId)
+        
+        if (employeeData) {
+          fullName = employeeData.full_name || fullName
+          unitId = employeeData.unit_id
+        }
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.warn('[useAuth] Employee fetch failed:', err.message)
+        }
+      }
+
+      const newUser: User = {
+        id: sessionUser.id,
+        email: sessionUser.email || '',
+        role,
+        full_name: fullName,
+        unit_id: unitId,
+      }
+
+      // Update cache
+      userCache.set(newUser)
+      
+      if (mountedRef.current) {
+        setUser(newUser)
+        setLoading(false)
+      }
+        
+    } catch (error) {
+      console.error('[useAuth] Error loading user:', error)
+      if (mountedRef.current) {
+        setUser(null)
+        setLoading(false)
+      }
+    } finally {
+      fetchingRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    mountedRef.current = true
+    
+    loadUser()
+
+    // Listen to auth changes
+    const supabase = createClient()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        userCache.clear()
+        if (mountedRef.current) {
+          setUser(null)
+          setLoading(false)
+        }
+      } else if (event === 'SIGNED_IN' && session) {
+        // Invalidate cache on sign in
+        userCache.clear()
+        loadUser()
+      }
     })
 
     return () => {
-      mounted = false
+      mountedRef.current = false
       subscription.unsubscribe()
     }
-  }, [])
+  }, [loadUser])
 
   return { user, loading }
 }

@@ -6,14 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { authService } from '@/lib/services/auth.service'
-import { Loader2 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { Loader2, RefreshCw } from 'lucide-react'
 import { Footer } from '@/components/layout/Footer'
-
-// All authenticated users go to unified dashboard
-function getDashboardRoute(): string {
-  return '/dashboard'
-}
 
 function getErrorMessage(errorCode: string | null): string | null {
   if (!errorCode) return null
@@ -33,6 +28,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('admin123')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showClearStorage, setShowClearStorage] = useState(false)
   const searchParams = useSearchParams()
 
   useEffect(() => {
@@ -40,7 +36,57 @@ export default function LoginPage() {
     if (errorParam) {
       setError(getErrorMessage(errorParam))
     }
+    
+    // Check if there's a stuck session
+    checkStuckSession()
   }, [searchParams])
+  
+  const checkStuckSession = async () => {
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (session) {
+        console.log('[LOGIN] Found existing session, clearing...')
+        await supabase.auth.signOut({ scope: 'local' })
+        
+        // Clear all storage
+        try {
+          localStorage.clear()
+          sessionStorage.clear()
+        } catch (e) {
+          console.warn('[LOGIN] Could not clear storage:', e)
+        }
+      }
+    } catch (e) {
+      console.warn('[LOGIN] Error checking session:', e)
+    }
+  }
+  
+  const handleClearStorage = () => {
+    try {
+      // Clear all storage
+      localStorage.clear()
+      sessionStorage.clear()
+      
+      // Clear all cookies
+      document.cookie.split(";").forEach((c) => {
+        const cookieName = c.split("=")[0].trim()
+        document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`
+        document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${window.location.hostname};`
+      })
+      
+      setError(null)
+      setShowClearStorage(false)
+      alert('Storage berhasil dibersihkan. Silakan coba login lagi.')
+      
+      // Reload page
+      window.location.reload()
+    } catch (e) {
+      console.error('[LOGIN] Error clearing storage:', e)
+      alert('Gagal membersihkan storage. Silakan coba manual di DevTools.')
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,30 +98,68 @@ export default function LoginPage() {
 
     try {
       console.log('[LOGIN] Starting login process...')
-      const result = await authService.login({ email, password })
-
-      console.log('[LOGIN] Login result:', { success: result.success, hasUser: !!result.user })
-
-      if (result.success && result.user) {
-        console.log('[LOGIN] Login successful, redirecting to dashboard...')
-        
-        // Small delay to ensure cookies are set
-        await new Promise(resolve => setTimeout(resolve, 500))
-        
-        // Use hard navigation for reliable redirect
-        const dashboardUrl = getDashboardRoute()
-        console.log('[LOGIN] Redirecting to:', dashboardUrl)
-        
-        // Force hard redirect with replace to prevent back button issues
-        window.location.replace(dashboardUrl)
-      } else {
-        console.error('[LOGIN] Login failed:', result.error)
-        setError(result.error || 'Email atau kata sandi salah')
-        setIsLoading(false)
+      
+      const supabase = createClient()
+      
+      // Clear any existing session first
+      try {
+        await supabase.auth.signOut({ scope: 'local' })
+        console.log('[LOGIN] Cleared existing session')
+      } catch (clearError) {
+        console.warn('[LOGIN] Could not clear session:', clearError)
       }
-    } catch (err) {
-      console.error('[LOGIN] Exception during login:', err)
-      setError('Terjadi kesalahan, silakan coba lagi')
+      
+      // Small delay to ensure session is cleared
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      console.log('[LOGIN] Attempting sign in...')
+      
+      // Login with credentials
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password: password,
+      })
+
+      if (authError) {
+        console.error('[LOGIN] Auth error:', authError)
+        setError(authError.message || 'Email atau kata sandi salah')
+        setShowClearStorage(true) // Show clear storage button on error
+        setIsLoading(false)
+        return
+      }
+
+      if (!authData.user || !authData.session) {
+        console.error('[LOGIN] No user or session returned')
+        setError('Gagal membuat sesi, silakan coba lagi')
+        setIsLoading(false)
+        return
+      }
+
+      console.log('[LOGIN] Login successful!')
+      console.log('[LOGIN] User:', authData.user.email)
+      console.log('[LOGIN] Role:', authData.user.user_metadata?.role)
+      console.log('[LOGIN] Session expires:', new Date(authData.session.expires_at! * 1000).toLocaleString())
+      
+      // Wait a bit for cookies to be set
+      await new Promise(resolve => setTimeout(resolve, 200))
+      
+      // Redirect using window.location for full page reload
+      // This ensures middleware runs and cookies are properly set
+      console.log('[LOGIN] Redirecting to dashboard...')
+      window.location.href = '/dashboard'
+      
+    } catch (err: any) {
+      console.error('[LOGIN] Exception:', err)
+      
+      // Check for specific errors
+      if (err?.message?.includes('storage') || err?.message?.includes('localStorage')) {
+        setError('Terjadi masalah dengan penyimpanan browser. Silakan refresh halaman dan coba lagi.')
+        setShowClearStorage(true)
+      } else {
+        setError('Terjadi kesalahan sistem, silakan coba lagi')
+        setShowClearStorage(true)
+      }
+      
       setIsLoading(false)
     }
   }
@@ -123,8 +207,22 @@ export default function LoginPage() {
               </div>
 
               {error && (
-                <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
-                  {error}
+                <div className="space-y-2">
+                  <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
+                    {error}
+                  </div>
+                  {showClearStorage && (
+                    <Button
+                      type="button"
+                      onClick={handleClearStorage}
+                      variant="outline"
+                      className="w-full"
+                      size="sm"
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Bersihkan Storage & Coba Lagi
+                    </Button>
+                  )}
                 </div>
               )}
 

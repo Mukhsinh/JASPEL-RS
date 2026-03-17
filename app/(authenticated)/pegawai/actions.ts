@@ -1,7 +1,8 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import type { Pegawai } from '@/lib/types/database.types'
+import { revalidatePath } from 'next/cache'
+import type { Pegawai, CreatePegawaiData, UpdatePegawaiData } from '@/lib/types/database.types'
 
 /**
  * Server action to get pegawai with unit data
@@ -45,6 +46,7 @@ export async function getPegawaiWithUnits(
     const { data, error, count } = await query
     
     if (error) {
+      console.error('Query error:', error)
       return { data: [], count: 0, error: error.message }
     }
     
@@ -59,6 +61,129 @@ export async function getPegawaiWithUnits(
     return { data: transformedData, count: count || 0 }
   } catch (err: any) {
     console.error('getPegawaiWithUnits error:', err)
-    return { data: [], count: 0, error: err.message }
+    return { data: [], count: 0, error: err.message || 'Terjadi kesalahan' }
+  }
+}
+
+/**
+ * Server action to create new pegawai
+ */
+export async function createPegawai(data: CreatePegawaiData): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient()
+    
+    // Verify user is superadmin
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user || user.user_metadata?.role !== 'superadmin') {
+      return { success: false, error: 'Tidak memiliki akses' }
+    }
+    
+    const { error } = await supabase
+      .from('m_employees')
+      .insert([data])
+    
+    if (error) {
+      console.error('Insert error:', error)
+      return { success: false, error: error.message }
+    }
+    
+    revalidatePath('/pegawai')
+    return { success: true }
+  } catch (err: any) {
+    console.error('createPegawai error:', err)
+    return { success: false, error: err.message || 'Terjadi kesalahan' }
+  }
+}
+
+/**
+ * Server action to update pegawai
+ */
+export async function updatePegawai(id: string, data: UpdatePegawaiData): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient()
+    
+    // Verify user is superadmin
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user || user.user_metadata?.role !== 'superadmin') {
+      return { success: false, error: 'Tidak memiliki akses' }
+    }
+    
+    const { error } = await supabase
+      .from('m_employees')
+      .update({ ...data, updated_at: new Date().toISOString() })
+      .eq('id', id)
+    
+    if (error) {
+      console.error('Update error:', error)
+      return { success: false, error: error.message }
+    }
+    
+    revalidatePath('/pegawai')
+    return { success: true }
+  } catch (err: any) {
+    console.error('updatePegawai error:', err)
+    return { success: false, error: err.message || 'Terjadi kesalahan' }
+  }
+}
+
+/**
+ * Server action to delete pegawai
+ */
+export async function deletePegawai(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient()
+    
+    // Verify user is superadmin
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user || user.user_metadata?.role !== 'superadmin') {
+      return { success: false, error: 'Tidak memiliki akses' }
+    }
+    
+    const { error } = await supabase
+      .from('m_employees')
+      .delete()
+      .eq('id', id)
+    
+    if (error) {
+      console.error('Delete error:', error)
+      return { success: false, error: error.message }
+    }
+    
+    revalidatePath('/pegawai')
+    return { success: true }
+  } catch (err: any) {
+    console.error('deletePegawai error:', err)
+    return { success: false, error: err.message || 'Terjadi kesalahan' }
+  }
+}
+
+/**
+ * Server action to get all units for dropdown
+ */
+export async function getUnitsForDropdown(): Promise<{ data: Array<{ id: string; name: string }>; error?: string }> {
+  try {
+    const supabase = await createClient()
+    
+    // Verify user is authenticated
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return { data: [], error: 'Tidak terautentikasi' }
+    }
+    
+    const { data, error } = await supabase
+      .from('m_units')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('name')
+    
+    if (error) {
+      console.error('Units query error:', error)
+      return { data: [], error: error.message }
+    }
+    
+    return { data: data || [] }
+  } catch (err: any) {
+    console.error('getUnitsForDropdown error:', err)
+    return { data: [], error: err.message || 'Terjadi kesalahan' }
   }
 }
