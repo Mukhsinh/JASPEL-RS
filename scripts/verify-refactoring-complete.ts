@@ -94,8 +94,8 @@ console.log('\n📋 Test 6: Sidebar Component')
 checkFile('components/navigation/Sidebar.tsx', 'Sidebar component exists')
 checkFileContains('components/navigation/Sidebar.tsx', [
   'export default function Sidebar',
-  'createClient',
-  'useState'
+  'import { createClient }',
+  'useState<User | null>'
 ], 'Sidebar component properly structured')
 
 // 7. Dashboard Optimizations
