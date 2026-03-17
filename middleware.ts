@@ -82,7 +82,7 @@ export async function middleware(request: NextRequest) {
     if (
       pathname.startsWith('/_next') ||
       pathname.startsWith('/favicon') ||
-me.startsWith('/icon') ||
+      pathname.startsWith('/icon') ||
       pathname.includes('.') ||
       pathname === '/api/health'
     ) {
@@ -120,7 +120,7 @@ me.startsWith('/icon') ||
               ...options,
             })
           },
-          reme: string, options: CookieOptions) {
+          remove(name: string, options: CookieOptions) {
             request.cookies.set({
               name,
               value: '',
@@ -186,7 +186,7 @@ me.startsWith('/icon') ||
       }
     }
 
-date session
+    // 4. Validate session
     if (!session) {
       // Only redirect to login if not already on login page
       if (pathname !== '/login') {
@@ -196,7 +196,7 @@ date session
         // Clear auth cookies
         const cookiesToClear = ['sb-access-token', 'sb-refresh-token', 'supabase-auth-token', 'sb-auth-token']
         cookiesToClear.forEach(cookieName => {
-          redirectResponse.cookies.set(cookieN0, path: '/' })
+          redirectResponse.cookies.set(cookieName, '', { maxAge: 0, path: '/' })
         })
         
         return redirectResponse
