@@ -48,40 +48,43 @@ export interface Activity {
 
 export class DashboardService {
   /**
-   * Get dashboard statistics for superadmin - OPTIMIZED with single query
+   * Get dashboard statistics for superadmin - using direct queries
    */
   static async getSuperadminStats(): Promise<DashboardStats> {
     const supabase = await createClient()
 
     try {
-      // Use single optimized query instead of multiple RPC calls
-      const { data: stats, error } = await supabase
-        .rpc('get_dashboard_stats_optimized')
-        .single()
+      const currentPeriod = new Date().toISOString().slice(0, 7) // YYYY-MM
 
-      if (error) {
-        console.error('Error getting dashboard stats (RPC get_dashboard_stats_optimized failed):', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        })
-        return this.getFallbackStats()
-      }
+      // Parallel direct queries instead of RPC
+      const [employeesRes, unitsRes, assessmentsRes] = await Promise.all([
+        supabase.from('m_employees').select('id', { count: 'exact', head: true }).eq('is_active', true),
+        supabase.from('m_units').select('id', { count: 'exact', head: true }).eq('is_active', true),
+        supabase.from('t_kpi_assessments').select('score, employee_id').eq('period', currentPeriod)
+      ])
 
-      if (!stats) {
-        return this.getFallbackStats()
-      }
+      const totalEmployees = employeesRes.count || 0
+      const totalUnits = unitsRes.count || 0
+
+      const assessments = assessmentsRes.data || []
+      const avgScore = assessments.length > 0
+        ? assessments.reduce((sum, a) => sum + (Number(a.score) || 0), 0) / assessments.length
+        : 0
+
+      const uniqueAssessedEmployees = new Set(assessments.map(a => a.employee_id)).size
+      const completionRate = totalEmployees > 0
+        ? (uniqueAssessedEmployees / totalEmployees) * 100
+        : 0
 
       return {
-        totalEmployees: Number((stats as any).total_employees) || 0,
-        totalUnits: Number((stats as any).total_units) || 0,
-        avgScore: Math.round(Number((stats as any).avg_score) * 100) / 100,
-        completionRate: Math.round(Number((stats as any).completion_rate) * 10) / 10,
+        totalEmployees,
+        totalUnits,
+        avgScore: Math.round(avgScore * 100) / 100,
+        completionRate: Math.round(completionRate * 10) / 10,
         trends: {
-          employees: Number((stats as any).employee_trend) || 0,
-          score: Number((stats as any).score_trend) || 0,
-          completion: Number((stats as any).completion_trend) || 0
+          employees: 0,
+          score: 0,
+          completion: 0
         }
       }
     } catch (error) {
@@ -91,7 +94,7 @@ export class DashboardService {
   }
 
   /**
-   * Fallback stats when RPC fails
+   * Fallback stats when queries fail
    */
   private static getFallbackStats(): DashboardStats {
     return {
@@ -108,33 +111,62 @@ export class DashboardService {
   }
 
   /**
-   * Get top performers - OPTIMIZED with database aggregation
+   * Get top performers - using direct queries with joins
    */
   static async getTopPerformers(limit: number = 5): Promise<TopPerformer[]> {
     const supabase = await createClient()
 
     try {
-      // Use database aggregation for better performance
-      const { data: topPerformers, error } = await supabase
-        .rpc('get_top_performers', { performer_limit: limit })
+      const currentPeriod = new Date().toISOString().slice(0, 7) // YYYY-MM
+
+      // Get assessments for current period with employee and unit info
+      const { data: assessments, error } = await supabase
+        .from('t_kpi_assessments')
+        .select(`
+          score,
+          employee_id,
+          m_employees!t_kpi_assessments_employee_id_fkey (
+            id, full_name, is_active,
+            m_units!m_employees_unit_id_fkey ( name )
+          )
+        `)
+        .eq('period', currentPeriod)
 
       if (error) {
-        console.error('Error fetching top performers (RPC get_top_performers failed):', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        })
+        console.error('Error fetching top performers:', error.message)
         return []
       }
 
-      return (topPerformers || []).map((performer: any, index: number) => ({
-        id: performer.employee_id?.toString() || '',
-        name: performer.employee_name || 'Unknown',
-        unit: performer.unit_name || 'Unknown',
-        score: Math.round((performer.avg_score || 0) * 100) / 100,
-        rank: index + 1
-      }))
+      // Aggregate scores per employee
+      const employeeScores: Record<string, { name: string; unit: string; scores: number[] }> = {}
+
+      for (const a of (assessments || [])) {
+        const emp = a.m_employees as any
+        if (!emp || !emp.is_active) continue
+
+        const empId = emp.id
+        if (!employeeScores[empId]) {
+          employeeScores[empId] = {
+            name: emp.full_name || 'Unknown',
+            unit: emp.m_units?.name || 'Unknown',
+            scores: []
+          }
+        }
+        employeeScores[empId].scores.push(Number(a.score) || 0)
+      }
+
+      // Calculate averages & sort
+      const sorted = Object.entries(employeeScores)
+        .map(([id, data]) => ({
+          id,
+          name: data.name,
+          unit: data.unit,
+          score: Math.round((data.scores.reduce((s, v) => s + v, 0) / data.scores.length) * 100) / 100
+        }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit)
+
+      return sorted.map((p, i) => ({ ...p, rank: i + 1 }))
     } catch (error) {
       console.error('Error in getTopPerformers:', error)
       return []
@@ -142,51 +174,68 @@ export class DashboardService {
   }
 
   /**
-   * Get unit performance data - OPTIMIZED with single query
+   * Get unit performance data - using direct queries
    */
   static async getUnitPerformance(): Promise<UnitPerformance[]> {
     const supabase = await createClient()
 
     try {
-      // Use optimized database function
-      const { data: unitStats, error } = await supabase
-        .rpc('get_unit_performance_stats')
+      const currentPeriod = new Date().toISOString().slice(0, 7)
+
+      // Get all active units with their employees
+      const { data: units, error } = await supabase
+        .from('m_units')
+        .select(`
+          id, name,
+          m_employees!m_employees_unit_id_fkey ( id, is_active )
+        `)
+        .eq('is_active', true)
+        .order('name')
 
       if (error) {
-        console.error('Error fetching unit performance (RPC get_unit_performance_stats failed):', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        })
-        // Fallback to basic query if RPC fails
-        const { data: units } = await supabase
-          .from('m_units')
-          .select('id, name')
-          .eq('is_active', true)
-          .limit(10) // Limit for performance
-
-        return (units || []).map(unit => ({
-          id: unit.id,
-          name: unit.name,
-          employeeCount: 0,
-          avgScore: 0,
-          trend: 'stable' as const,
-          trendValue: 0,
-          status: 'average' as const
-        }))
+        console.error('Error fetching units:', error.message)
+        return []
       }
 
-      return (unitStats || []).map((unit: any) => {
-        const status = unit.avg_score >= 4 ? 'excellent' :
-          unit.avg_score >= 3 ? 'good' :
-            unit.avg_score >= 2 ? 'average' : 'poor'
+      // Get all assessments for current period
+      const { data: assessments } = await supabase
+        .from('t_kpi_assessments')
+        .select('employee_id, score')
+        .eq('period', currentPeriod)
+
+      // Build a map of employee_id -> scores
+      const empScoreMap: Record<string, number[]> = {}
+      for (const a of (assessments || [])) {
+        if (!empScoreMap[a.employee_id]) empScoreMap[a.employee_id] = []
+        empScoreMap[a.employee_id].push(Number(a.score) || 0)
+      }
+
+      return (units || []).map(unit => {
+        const employees = (unit.m_employees as any[]) || []
+        const activeEmployees = employees.filter((e: any) => e.is_active)
+        const employeeCount = activeEmployees.length
+
+        // Calculate unit avg score from assessments
+        let totalScore = 0
+        let scoreCount = 0
+        for (const emp of activeEmployees) {
+          const scores = empScoreMap[emp.id]
+          if (scores) {
+            totalScore += scores.reduce((s, v) => s + v, 0)
+            scoreCount += scores.length
+          }
+        }
+        const avgScore = scoreCount > 0 ? totalScore / scoreCount : 0
+
+        const status = avgScore >= 4 ? 'excellent' :
+          avgScore >= 3 ? 'good' :
+            avgScore >= 2 ? 'average' : 'poor'
 
         return {
-          id: unit.unit_id?.toString() || '',
-          name: unit.unit_name,
-          employeeCount: unit.employee_count || 0,
-          avgScore: Math.round((unit.avg_score || 0) * 100) / 100,
+          id: unit.id,
+          name: unit.name,
+          employeeCount,
+          avgScore: Math.round(avgScore * 100) / 100,
           trend: 'stable' as const,
           trendValue: 0,
           status: status as 'excellent' | 'good' | 'average' | 'poor'
