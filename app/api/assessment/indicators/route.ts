@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
-    
+
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
     if (!employeeId || !period) {
       return NextResponse.json(
-        { error: 'employee_id and period are required' }, 
+        { error: 'employee_id and period are required' },
         { status: 400 }
       )
     }
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
 
       if (!targetEmployee || targetEmployee.unit_id !== currentEmployee.unit_id) {
         return NextResponse.json(
-          { error: 'You can only view indicators for employees in your unit' }, 
+          { error: 'You can only view indicators for employees in your unit' },
           { status: 403 }
         )
       }
@@ -84,6 +84,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: `Failed to fetch indicators: ${indicatorsError.message}` }, { status: 500 })
     }
 
+    const indicatorIds = indicators?.map(i => i.id) || []
+
+    // Get sub indicators for the indicators
+    const { data: subIndicators, error: subIndicatorsError } = await supabase
+      .from('m_kpi_sub_indicators')
+      .select('id, indicator_id, code, name, target_value, weight_percentage, scoring_criteria, measurement_unit, description')
+      .eq('is_active', true)
+      .in('indicator_id', indicatorIds)
+
+    if (subIndicatorsError) {
+      return NextResponse.json({ error: `Failed to fetch sub-indicators: ${subIndicatorsError.message}` }, { status: 500 })
+    }
+
+    // Group sub-indicators by indicator
+    const subIndicatorMap = new Map<string, any[]>()
+    subIndicators?.forEach(sub => {
+      if (!subIndicatorMap.has(sub.indicator_id)) {
+        subIndicatorMap.set(sub.indicator_id, [])
+      }
+      subIndicatorMap.get(sub.indicator_id)!.push(sub)
+    })
+
     // Get existing assessments
     const { data: existingAssessments, error: assessmentsError } = await supabase
       .from('t_kpi_assessments')
@@ -98,7 +120,7 @@ export async function GET(request: NextRequest) {
 
     const assessmentMap = new Map((existingAssessments || []).map(a => [a.indicator_id, a]))
 
-    // Map indicators with current assessments
+    // Map indicators with current assessments and sub-indicators
     const indicatorsWithAssessments = (indicators || []).map(indicator => {
       const category = categoryMap.get(indicator.category_id)
       return {
@@ -109,10 +131,11 @@ export async function GET(request: NextRequest) {
         category_id: indicator.category_id,
         category_name: category?.name || 'Unknown Category',
         category_type: category?.type || 'P1',
+        sub_indicators: subIndicatorMap.get(indicator.id) || [],
         current_assessment: assessmentMap.get(indicator.id)
       }
     })
-    
+
     // Group indicators by category
     const groupedIndicators = indicatorsWithAssessments.reduce((acc: any, indicator: any) => {
       const category = indicator.category_type
@@ -139,14 +162,14 @@ export async function GET(request: NextRequest) {
       return order[a.category as keyof typeof order] - order[b.category as keyof typeof order]
     })
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       indicators: categorizedIndicators,
-      total_indicators: indicatorsWithAssessments.length 
+      total_indicators: indicatorsWithAssessments.length
     })
   } catch (error: any) {
     console.error('Assessment indicators GET error:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch KPI indicators' }, 
+      { error: 'Failed to fetch KPI indicators' },
       { status: 500 }
     )
   }

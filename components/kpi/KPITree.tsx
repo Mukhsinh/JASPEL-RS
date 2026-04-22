@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, memo } from 'react'
 import { ChevronDown, ChevronRight, Edit, Trash2, Plus, Layers } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { KPICategory, KPIIndicator, KPISubIndicator } from '@/lib/types/kpi.types'
@@ -19,7 +19,7 @@ interface KPITreeProps {
   onDeleteSubIndicator: (subIndicatorId: string) => void
 }
 
-export default function KPITree({
+const KPITree = memo(function KPITree({
   categories,
   indicators,
   subIndicators,
@@ -36,13 +36,13 @@ export default function KPITree({
   const [expandedIndicators, setExpandedIndicators] = useState<Set<string>>(new Set())
 
   // OPTIMIZED: Memoize expanded states to prevent unnecessary re-renders
-  const expandedCategoryIds = useMemo(() => 
-    new Set(categories.map(c => c.id)), 
+  const expandedCategoryIds = useMemo(() =>
+    new Set(categories.map(c => c.id)),
     [categories]
   )
 
   const expandedIndicatorIds = useMemo(() => {
-    const indicatorsWithSubs = indicators.filter(indicator => 
+    const indicatorsWithSubs = indicators.filter(indicator =>
       subIndicators.some(sub => sub.indicator_id === indicator.id)
     )
     return new Set(indicatorsWithSubs.map(i => i.id))
@@ -77,12 +77,40 @@ export default function KPITree({
     setExpandedIndicators(newExpanded)
   }
 
+  // Memoize grouped indicators by category
+  const indicatorsByCategory = useMemo(() => {
+    const map = new Map<string, KPIIndicator[]>()
+    categories.forEach(c => map.set(c.id, []))
+    indicators.forEach(i => {
+      if (map.has(i.category_id)) {
+        map.get(i.category_id)!.push(i)
+      } else {
+        map.set(i.category_id, [i])
+      }
+    })
+    return map
+  }, [categories, indicators])
+
+  // Memoize grouped sub-indicators by indicator
+  const subIndicatorsByIndicator = useMemo(() => {
+    const map = new Map<string, KPISubIndicator[]>()
+    indicators.forEach(i => map.set(i.id, []))
+    subIndicators.forEach(s => {
+      if (map.has(s.indicator_id)) {
+        map.get(s.indicator_id)!.push(s)
+      } else {
+        map.set(s.indicator_id, [s])
+      }
+    })
+    return map
+  }, [indicators, subIndicators])
+
   function getCategoryIndicators(categoryId: string) {
-    return indicators.filter(i => i.category_id === categoryId)
+    return indicatorsByCategory.get(categoryId) || []
   }
 
   function getIndicatorSubIndicators(indicatorId: string) {
-    return subIndicators.filter(s => s.indicator_id === indicatorId)
+    return subIndicatorsByIndicator.get(indicatorId) || []
   }
 
   function calculateIndicatorWeightSum(categoryId: string) {
@@ -310,13 +338,12 @@ export default function KPITree({
                                           {sub.scoring_criteria?.map((criterion, idx) => (
                                             <span
                                               key={idx}
-                                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs ${
-                                                idx === 0 ? 'bg-red-100 text-red-700 border-red-200' :
-                                                idx === 1 ? 'bg-orange-100 text-orange-700 border-orange-200' :
-                                                idx === 2 ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
-                                                idx === 3 ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                                                'bg-green-100 text-green-700 border-green-200'
-                                              }`}
+                                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs ${idx === 0 ? 'bg-red-100 text-red-700 border-red-200' :
+                                                  idx === 1 ? 'bg-orange-100 text-orange-700 border-orange-200' :
+                                                    idx === 2 ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                                                      idx === 3 ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                                        'bg-green-100 text-green-700 border-green-200'
+                                                }`}
                                               title={criterion.label}
                                             >
                                               <span className="font-bold">{Number(criterion.score) || 0}</span>
@@ -369,4 +396,6 @@ export default function KPITree({
       })}
     </div>
   )
-}
+})
+
+export default KPITree

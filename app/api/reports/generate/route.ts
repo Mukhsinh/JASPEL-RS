@@ -103,28 +103,65 @@ async function generateIncentiveReport(supabase: any, period: string) {
 /**
  * Generate KPI Achievement Report
  * Requirement 12.3: Display indicator name, target, realization, achievement %
+ * Updated: Include data from both quantitative realization and qualitative assessments
  */
 async function generateKPIAchievementReport(supabase: any, period: string) {
-  const { data, error } = await supabase
+  // Fetch Realization Data (Quantitative)
+  const { data: realizations, error: relError } = await supabase
     .from('t_realization')
     .select(`
       realization_value,
       achievement_percentage,
       m_kpi_indicators!inner (
+        id,
         name,
         target_value
       )
     `)
     .eq('period', period)
 
-  if (error) throw error
+  if (relError) throw relError
 
-  return data.map((row: any) => ({
-    indicator_name: row.m_kpi_indicators.name,
-    target_value: parseFloat(row.m_kpi_indicators.target_value).toFixed(2),
-    realization_value: parseFloat(row.realization_value).toFixed(2),
-    achievement_percentage: parseFloat(row.achievement_percentage || 0).toFixed(2) + '%',
-  }))
+  // Fetch Assessment Data (Qualitative/Behavioral)
+  const { data: assessments, error: assError } = await supabase
+    .from('t_kpi_assessments')
+    .select(`
+      realization_value,
+      achievement_percentage,
+      m_kpi_indicators!inner (
+        id,
+        name,
+        target_value
+      )
+    `)
+    .eq('period', period)
+
+  if (assError) throw assError
+
+  // Merge Data
+  const mergedData = new Map()
+
+  // Add realizations
+  realizations?.forEach((row: any) => {
+    mergedData.set(row.m_kpi_indicators.id, {
+      indicator_name: row.m_kpi_indicators.name,
+      target_value: parseFloat(row.m_kpi_indicators.target_value).toFixed(2),
+      realization_value: parseFloat(row.realization_value).toFixed(2),
+      achievement_percentage: parseFloat(row.achievement_percentage || 0).toFixed(2) + '%',
+    })
+  })
+
+  // Add/Override with assessments (assessments usually take precedence if both exist)
+  assessments?.forEach((row: any) => {
+    mergedData.set(row.m_kpi_indicators.id, {
+      indicator_name: row.m_kpi_indicators.name,
+      target_value: parseFloat(row.m_kpi_indicators.target_value).toFixed(2),
+      realization_value: parseFloat(row.realization_value).toFixed(2),
+      achievement_percentage: parseFloat(row.achievement_percentage || 0).toFixed(2) + '%',
+    })
+  })
+
+  return Array.from(mergedData.values())
 }
 
 /**
@@ -219,14 +256,15 @@ async function generateEmployeeSlipReport(supabase: any, period: string) {
   const results = []
 
   for (const row of data) {
-    // Get P1, P2, P3 indicators for this employee's unit
-    const { data: indicators } = await supabase
+    // Get P1, P2, P3 indicators for this employee's unit (from both realization and assessments)
+    const { data: realizationIndicators } = await supabase
       .from('t_realization')
       .select(`
         realization_value,
         achievement_percentage,
         score,
         m_kpi_indicators!inner (
+          id,
           name,
           weight_percentage,
           m_kpi_categories!inner (
@@ -237,15 +275,46 @@ async function generateEmployeeSlipReport(supabase: any, period: string) {
       .eq('employee_id', row.employee_id)
       .eq('period', period)
 
-    const p1Indicators = indicators?.filter(
+    const { data: assessmentIndicators } = await supabase
+      .from('t_kpi_assessments')
+      .select(`
+        realization_value,
+        achievement_percentage,
+        score,
+        m_kpi_indicators!inner (
+          id,
+          name,
+          weight_percentage,
+          m_kpi_categories!inner (
+            category
+          )
+        )
+      `)
+      .eq('employee_id', row.employee_id)
+      .eq('period', period)
+
+    // Merge indicators
+    const allIndicatorsMap = new Map()
+
+    realizationIndicators?.forEach((i: any) => {
+      allIndicatorsMap.set(i.m_kpi_indicators.id, i)
+    })
+
+    assessmentIndicators?.forEach((i: any) => {
+      allIndicatorsMap.set(i.m_kpi_indicators.id, i)
+    })
+
+    const indicators = Array.from(allIndicatorsMap.values())
+
+    const p1Indicators = indicators.filter(
       (i: any) => i.m_kpi_indicators.m_kpi_categories.category === 'P1'
-    ) || []
-    const p2Indicators = indicators?.filter(
+    )
+    const p2Indicators = indicators.filter(
       (i: any) => i.m_kpi_indicators.m_kpi_categories.category === 'P2'
-    ) || []
-    const p3Indicators = indicators?.filter(
+    )
+    const p3Indicators = indicators.filter(
       (i: any) => i.m_kpi_indicators.m_kpi_categories.category === 'P3'
-    ) || []
+    )
 
     results.push({
       employee_name: row.m_employees.full_name,

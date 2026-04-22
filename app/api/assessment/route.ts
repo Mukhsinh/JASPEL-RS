@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-
 interface Assessment {
   id?: string
   employee_id: string
@@ -12,6 +11,7 @@ interface Assessment {
   achievement_percentage?: number
   score?: number
   notes?: string
+  sub_assessments?: any
   assessor_id: string
   created_at?: string
   updated_at?: string
@@ -39,23 +39,6 @@ async function logAssessmentAudit(
     // Don't throw error to avoid breaking the main operation
   }
 }
-
-interface Assessment {
-  id?: string
-  employee_id: string
-  indicator_id: string
-  period: string
-  realization_value: number
-  target_value: number
-  weight_percentage: number
-  achievement_percentage?: number
-  score?: number
-  notes?: string
-  assessor_id: string
-  created_at?: string
-  updated_at?: string
-}
-
 async function getAssessmentsForEmployee(employeeId: string, period: string): Promise<Assessment[]> {
   const supabase = await createClient()
   const { data, error } = await supabase
@@ -74,13 +57,28 @@ async function getAssessmentsForEmployee(employeeId: string, period: string): Pr
 async function upsertAssessment(assessment: Assessment): Promise<Assessment> {
   const supabase = await createClient()
 
-  const achievement = assessment.target_value === 0 ? 100 : (assessment.realization_value / assessment.target_value) * 100
-  const score = (achievement * assessment.weight_percentage) / 100
+  // Achievement logic can stay the same for backward compatibility
+  // Or it could be overriden by the frontend precalculated score if provided
+  const achievement = assessment.achievement_percentage !== undefined
+    ? assessment.achievement_percentage
+    : (assessment.target_value === 0 ? 100 : (assessment.realization_value / assessment.target_value) * 100)
+
+  const score = assessment.score !== undefined
+    ? assessment.score
+    : (achievement * assessment.weight_percentage) / 100
 
   const assessmentData = {
-    ...assessment,
+    employee_id: assessment.employee_id,
+    indicator_id: assessment.indicator_id,
+    period: assessment.period,
+    realization_value: assessment.realization_value,
+    target_value: assessment.target_value,
+    weight_percentage: assessment.weight_percentage,
     achievement_percentage: achievement,
-    score: score
+    score: score,
+    notes: assessment.notes,
+    sub_assessments: assessment.sub_assessments || [],
+    assessor_id: assessment.assessor_id
   }
 
   const { data: existing } = await supabase
@@ -133,7 +131,7 @@ async function upsertAssessment(assessment: Assessment): Promise<Assessment> {
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
-    
+
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -146,18 +144,18 @@ export async function GET(request: NextRequest) {
 
     if (!employeeId || !period) {
       return NextResponse.json(
-        { error: 'employee_id and period are required' }, 
+        { error: 'employee_id and period are required' },
         { status: 400 }
       )
     }
 
     const assessments = await getAssessmentsForEmployee(employeeId, period)
-    
+
     return NextResponse.json({ assessments })
   } catch (error: any) {
     console.error('Assessment GET error:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch assessments' }, 
+      { error: 'Failed to fetch assessments' },
       { status: 500 }
     )
   }
@@ -166,7 +164,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
-    
+
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -200,19 +198,19 @@ export async function POST(request: NextRequest) {
 
       if (!targetEmployee || targetEmployee.unit_id !== currentEmployee.unit_id) {
         return NextResponse.json(
-          { error: 'You can only assess employees in your unit' }, 
+          { error: 'You can only assess employees in your unit' },
           { status: 403 }
         )
       }
     }
 
     const savedAssessment = await upsertAssessment(assessment)
-    
+
     return NextResponse.json({ assessment: savedAssessment })
   } catch (error: any) {
     console.error('Assessment POST error:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to save assessment' }, 
+      { error: error instanceof Error ? error.message : 'Failed to save assessment' },
       { status: 500 }
     )
   }
@@ -221,7 +219,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const supabase = await createClient()
-    
+
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -255,19 +253,19 @@ export async function PUT(request: NextRequest) {
 
       if (!targetEmployee || targetEmployee.unit_id !== currentEmployee.unit_id) {
         return NextResponse.json(
-          { error: 'You can only assess employees in your unit' }, 
+          { error: 'You can only assess employees in your unit' },
           { status: 403 }
         )
       }
     }
 
     const updatedAssessment = await upsertAssessment(assessment)
-    
+
     return NextResponse.json({ assessment: updatedAssessment })
   } catch (error: any) {
     console.error('Assessment PUT error:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update assessment' }, 
+      { error: error instanceof Error ? error.message : 'Failed to update assessment' },
       { status: 500 }
     )
   }

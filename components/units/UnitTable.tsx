@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import {
   Table,
   TableBody,
@@ -28,30 +28,30 @@ interface UnitTableProps {
   units: Unit[]
 }
 
-export function UnitTable({ units }: UnitTableProps) {
+export const UnitTable = memo(function UnitTable({ units }: UnitTableProps) {
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
-  
+
   const handleAdd = () => {
     setSelectedUnit(null)
     setIsFormOpen(true)
   }
-  
+
   const handleEdit = (unit: Unit) => {
     setSelectedUnit(unit)
     setIsFormOpen(true)
   }
-  
+
   const handleDelete = (unit: Unit) => {
     setSelectedUnit(unit)
     setIsDeleteOpen(true)
   }
-  
+
   const handleToggleActive = async (unit: Unit) => {
     try {
       const supabase = createClient()
-      
+
       const { error } = await supabase
         .from('m_units')
         .update({
@@ -59,39 +59,39 @@ export function UnitTable({ units }: UnitTableProps) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', unit.id)
-      
+
       if (error) throw error
-      
+
       // Refresh the page to show updated data
       window.location.reload()
     } catch (err) {
       console.error('Error toggling unit status:', err)
     }
   }
-  
+
   const getEmployeeCount = (unit: Unit) => {
     return unit.employees?.[0]?.count || 0
   }
-  
+
   const handleDownloadTemplate = () => {
     window.open('/api/units/template', '_blank')
   }
-  
+
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
-    
+
     const formData = new FormData()
     formData.append('file', file)
-    
+
     try {
       const response = await fetch('/api/units/import', {
         method: 'POST',
         body: formData,
       })
-      
+
       const result = await response.json()
-      
+
       if (response.ok) {
         alert(`Import berhasil!\nBerhasil: ${result.success}\nGagal: ${result.failed}${result.errors.length > 0 ? '\n\nError:\n' + result.errors.join('\n') : ''}`)
         window.location.reload()
@@ -102,28 +102,28 @@ export function UnitTable({ units }: UnitTableProps) {
       console.error('Import error:', error)
       alert('Terjadi kesalahan saat import')
     }
-    
+
     // Reset input
     event.target.value = ''
   }
-  
+
   const handleDownloadReport = (format: 'excel' | 'pdf') => {
     window.open(`/api/units/export?format=${format}`, '_blank')
   }
-  
+
   return (
     <>
       <div className="flex justify-between items-center mb-4">
         <div className="flex gap-2">
-          <Button 
+          <Button
             onClick={handleDownloadTemplate}
             className="bg-emerald-600 hover:bg-emerald-700 text-white"
           >
             <Download className="mr-2 h-4 w-4" />
             Unduh Template
           </Button>
-          
-          <Button 
+
+          <Button
             onClick={() => document.getElementById('import-units')?.click()}
             className="bg-amber-600 hover:bg-amber-700 text-white"
           >
@@ -137,16 +137,16 @@ export function UnitTable({ units }: UnitTableProps) {
             onChange={handleImport}
             className="hidden"
           />
-          
-          <Button 
+
+          <Button
             onClick={() => handleDownloadReport('excel')}
             className="bg-blue-600 hover:bg-blue-700 text-white"
           >
             <FileSpreadsheet className="mr-2 h-4 w-4" />
             Unduh Excel
           </Button>
-          
-          <Button 
+
+          <Button
             onClick={() => handleDownloadReport('pdf')}
             className="bg-red-600 hover:bg-red-700 text-white"
           >
@@ -154,8 +154,8 @@ export function UnitTable({ units }: UnitTableProps) {
             Unduh PDF
           </Button>
         </div>
-        
-        <Button 
+
+        <Button
           onClick={handleAdd}
           className="bg-blue-600 hover:bg-blue-700 text-white"
         >
@@ -163,7 +163,7 @@ export function UnitTable({ units }: UnitTableProps) {
           Tambah Unit
         </Button>
       </div>
-      
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -192,11 +192,10 @@ export function UnitTable({ units }: UnitTableProps) {
                   <TableCell>{getEmployeeCount(unit)}</TableCell>
                   <TableCell>
                     <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        unit.is_active
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${unit.is_active
                           ? 'bg-green-100 text-green-800'
                           : 'bg-gray-100 text-gray-800'
-                      }`}
+                        }`}
                     >
                       {unit.is_active ? 'Aktif' : 'Nonaktif'}
                     </span>
@@ -237,13 +236,13 @@ export function UnitTable({ units }: UnitTableProps) {
           </TableBody>
         </Table>
       </div>
-      
+
       <UnitFormDialog
         unit={selectedUnit}
         open={isFormOpen}
         onOpenChange={setIsFormOpen}
       />
-      
+
       <DeleteUnitDialog
         unit={selectedUnit}
         open={isDeleteOpen}
@@ -251,4 +250,4 @@ export function UnitTable({ units }: UnitTableProps) {
       />
     </>
   )
-}
+})

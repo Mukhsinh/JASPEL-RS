@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import { getSetting } from '@/lib/services/settings.service'
+import { getSetting, getCompanyInfo } from '@/lib/services/settings.service'
 
 interface ExportData {
   headers: string[]
@@ -93,29 +93,70 @@ export async function exportToExcel(options: ReportExportOptions): Promise<Buffe
       throw new Error('Invalid report type')
   }
 
+  // Fetch Company Info for Kop Surat
+  const companyInfo = await getCompanyInfo()
+
+  // Build Kop Surat
+  const kopSurat = [
+    [companyInfo.name.toUpperCase()],
+    [`${companyInfo.address}`],
+    [
+      [
+        companyInfo.phone ? `Telp: ${companyInfo.phone}` : null,
+        companyInfo.email ? `Email: ${companyInfo.email}` : null
+      ].filter(Boolean).join(' | ')
+    ],
+    ['━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'],
+    [sheetName.toUpperCase()],
+    [`Periode: ${period}`],
+    ['']
+  ]
+
+  // Prepend Kop Surat to wsData
+  wsData = [...kopSurat, ...wsData]
+
   // Create worksheet
   const ws = XLSX.utils.aoa_to_sheet(wsData)
 
-  // Apply formatting: Bold headers (row 0)
+  // Apply formatting: Bold headers
+  // Headers are now shifted down by kopSurat.length rows
+  const headerRowIdx = kopSurat.length
   const range = XLSX.utils.decode_range(ws['!ref'] || 'A1')
   for (let col = range.s.c; col <= range.e.c; col++) {
-    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col })
+    const cellAddress = XLSX.utils.encode_cell({ r: headerRowIdx, c: col })
     if (!ws[cellAddress]) continue
     ws[cellAddress].s = {
-      font: { bold: true },
-      fill: { fgColor: { rgb: 'CCCCCC' } },
+      font: { bold: true, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: '2563EB' } }, // Professional Blue
     }
   }
 
-  // Set column widths
-  const colWidths = wsData[0].map(() => ({ wch: 20 }))
+  // Format Kop Surat Title to be bold and large
+  for (let r = 0; r < kopSurat.length; r++) {
+    const cell = XLSX.utils.encode_cell({ r, c: 0 })
+    if (ws[cell]) {
+      ws[cell].s = { font: { bold: true, sz: 14 } }
+    }
+  }
+
+  // Set column widths based on content
+  const colWidths = [
+    { wch: 25 }, // First col usually name or indicator
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 15 },
+  ]
   ws['!cols'] = colWidths
 
   // Add footer rows
   const { data: footerData } = await getSetting('footer')
   const footerText = footerData?.text || 'JASPEL Enterprise'
   const dateStr = new Date().toLocaleString('id-ID')
-  
+
   // Add empty row and footer
   const footerRow = range.e.r + 2
   XLSX.utils.sheet_add_aoa(ws, [['']], { origin: footerRow })
@@ -141,30 +182,67 @@ export async function exportToExcelFile({
 }: ExportData) {
   // Create workbook
   const wb = XLSX.utils.book_new()
-  
-  // Combine headers and data
-  const wsData = [headers, ...data]
-  
+
+  // Fetch Company Info for Kop Surat
+  const companyInfo = await getCompanyInfo()
+
+  // Build Kop Surat
+  const kopSurat = [
+    [companyInfo.name.toUpperCase()],
+    [`${companyInfo.address}`],
+    [
+      [
+        companyInfo.phone ? `Telp: ${companyInfo.phone}` : null,
+        companyInfo.email ? `Email: ${companyInfo.email}` : null
+      ].filter(Boolean).join(' | ')
+    ],
+    ['━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'],
+    [sheetName.toUpperCase()],
+    ['']
+  ]
+
+  // Combine kop, headers and data
+  const wsData = [...kopSurat, headers, ...data]
+
   // Create worksheet
   const ws = XLSX.utils.aoa_to_sheet(wsData)
-  
+
   // Set column widths
   const colWidths = headers.map(() => ({ wch: 15 }))
   ws['!cols'] = colWidths
-  
+
+  const headerRowIdx = kopSurat.length
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1')
+
+  // Format headers
+  for (let col = range.s.c; col <= range.e.c; col++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: headerRowIdx, c: col })
+    if (!ws[cellAddress]) continue
+    ws[cellAddress].s = {
+      font: { bold: true, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: '2563EB' } },
+    }
+  }
+
+  // Format Kop
+  for (let r = 0; r < kopSurat.length; r++) {
+    const cell = XLSX.utils.encode_cell({ r, c: 0 })
+    if (ws[cell]) ws[cell].s = { font: { bold: true } }
+  }
+
   // Add footer rows
   const { data: footerData } = await getSetting('footer')
   const footerText = footerData?.text || 'JASPEL Enterprise'
   const dateStr = new Date().toLocaleString('id-ID')
-  
-  const footerRow = data.length + 2
+
+  const footerRow = kopSurat.length + 1 + data.length + 2
   XLSX.utils.sheet_add_aoa(ws, [['']], { origin: footerRow })
   XLSX.utils.sheet_add_aoa(ws, [[footerText]], { origin: footerRow + 1 })
   XLSX.utils.sheet_add_aoa(ws, [[`Dicetak: ${dateStr}`]], { origin: footerRow + 2 })
-  
+
   // Add worksheet to workbook
   XLSX.utils.book_append_sheet(wb, ws, sheetName)
-  
+
   // Generate Excel file
   XLSX.writeFile(wb, fileName)
 }
@@ -185,9 +263,9 @@ export async function exportKPITemplate(
     'Realization',
     'Notes'
   ]
-  
+
   const data: any[][] = []
-  
+
   employees.forEach(emp => {
     indicators.forEach(ind => {
       data.push([
@@ -201,7 +279,7 @@ export async function exportKPITemplate(
       ])
     })
   })
-  
+
   await exportToExcelFile({
     headers,
     data,
@@ -240,7 +318,7 @@ export async function exportCalculationResults(
     'Tax Amount',
     'Net Incentive'
   ]
-  
+
   const data = results.map(r => [
     r.employeeCode,
     r.employeeName,
@@ -253,7 +331,7 @@ export async function exportCalculationResults(
     r.taxAmount.toFixed(2),
     r.netIncentive.toFixed(2)
   ])
-  
+
   await exportToExcelFile({
     headers,
     data,
@@ -268,25 +346,25 @@ export async function exportCalculationResults(
 export async function parseExcelFile(file: File): Promise<any[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    
+
     reader.onload = (e) => {
       try {
         const data = e.target?.result
         const workbook = XLSX.read(data, { type: 'binary' })
-        
+
         // Get first sheet
         const sheetName = workbook.SheetNames[0]
         const worksheet = workbook.Sheets[sheetName]
-        
+
         // Convert to JSON
         const jsonData = XLSX.utils.sheet_to_json(worksheet)
-        
+
         resolve(jsonData)
       } catch (error: any) {
         reject(error)
       }
     }
-    
+
     reader.onerror = (error) => reject(error)
     reader.readAsBinaryString(file)
   })

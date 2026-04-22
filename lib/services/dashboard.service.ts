@@ -58,9 +58,14 @@ export class DashboardService {
       const { data: stats, error } = await supabase
         .rpc('get_dashboard_stats_optimized')
         .single()
-      
+
       if (error) {
-        console.error('Error getting dashboard stats:', error)
+        console.error('Error getting dashboard stats (RPC get_dashboard_stats_optimized failed):', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
         return this.getFallbackStats()
       }
 
@@ -114,7 +119,12 @@ export class DashboardService {
         .rpc('get_top_performers', { performer_limit: limit })
 
       if (error) {
-        console.error('Error fetching top performers:', error)
+        console.error('Error fetching top performers (RPC get_top_performers failed):', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
         return []
       }
 
@@ -143,7 +153,12 @@ export class DashboardService {
         .rpc('get_unit_performance_stats')
 
       if (error) {
-        console.error('Error fetching unit performance:', error)
+        console.error('Error fetching unit performance (RPC get_unit_performance_stats failed):', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
         // Fallback to basic query if RPC fails
         const { data: units } = await supabase
           .from('m_units')
@@ -163,10 +178,10 @@ export class DashboardService {
       }
 
       return (unitStats || []).map((unit: any) => {
-        const status = unit.avg_score >= 4 ? 'excellent' : 
-                      unit.avg_score >= 3 ? 'good' : 
-                      unit.avg_score >= 2 ? 'average' : 'poor'
-        
+        const status = unit.avg_score >= 4 ? 'excellent' :
+          unit.avg_score >= 3 ? 'good' :
+            unit.avg_score >= 2 ? 'average' : 'poor'
+
         return {
           id: unit.unit_id?.toString() || '',
           name: unit.unit_name,
@@ -194,7 +209,7 @@ export class DashboardService {
       const data: PerformanceData[] = []
 
       const currentDate = new Date()
-      
+
       for (let i = months - 1; i >= 0; i--) {
         const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1)
         const monthName = monthNames[date.getMonth()]
@@ -222,7 +237,7 @@ export class DashboardService {
             const indicator = a.m_kpi_indicators as any
             const category = indicator?.m_kpi_categories?.category
             const score = a.score || 0
-            
+
             if (category === 'P1') {
               p1 += score
               p1Count++
@@ -235,7 +250,7 @@ export class DashboardService {
             }
             total += score
           })
-          
+
           p1 = p1Count > 0 ? p1 / p1Count : 0
           p2 = p2Count > 0 ? p2 / p2Count : 0
           p3 = p3Count > 0 ? p3 / p3Count : 0
@@ -281,7 +296,7 @@ export class DashboardService {
       return audits.map(audit => {
         let type: Activity['type'] = 'info'
         const operation = audit.operation?.toLowerCase() || ''
-        
+
         if (operation.includes('delete')) type = 'error'
         else if (operation.includes('create') || operation.includes('insert')) type = 'success'
         else if (operation.includes('update')) type = 'warning'
@@ -328,7 +343,7 @@ export class DashboardService {
           const indicator = a.m_kpi_indicators as any
           const category = indicator?.m_kpi_categories?.category
           const score = a.score || 0
-          
+
           if (category === 'P1') p1Total += score
           else if (category === 'P2') p2Total += score
           else if (category === 'P3') p3Total += score

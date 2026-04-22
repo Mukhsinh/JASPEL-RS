@@ -10,7 +10,7 @@ export const revalidate = 0
 async function getAvailablePeriods(): Promise<string[]> {
   try {
     const supabase = await createClient()
-    
+
     const { data, error } = await supabase
       .from('t_pool')
       .select('period')
@@ -21,7 +21,7 @@ async function getAvailablePeriods(): Promise<string[]> {
       console.error('Error fetching periods:', error)
       return []
     }
-    
+
     return data?.map(item => item.period) || []
   } catch (error) {
     console.error('Exception in getAvailablePeriods:', error)
@@ -33,8 +33,13 @@ export default async function AssessmentPage() {
   try {
     const supabase = await createClient()
 
-    // Check authentication with error handling
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    // Optimize data fetching using Promise.all
+    const [authResponse, availablePeriods] = await Promise.all([
+      supabase.auth.getUser(),
+      getAvailablePeriods()
+    ])
+
+    const { data: { user }, error: authError } = authResponse
     if (authError || !user) {
       redirect('/login')
     }
@@ -56,9 +61,6 @@ export default async function AssessmentPage() {
       redirect('/forbidden')
     }
 
-    // Get available periods with fallback
-    const availablePeriods = await getAvailablePeriods()
-
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
@@ -73,7 +75,7 @@ export default async function AssessmentPage() {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           </div>
         }>
-          <AssessmentPageContent 
+          <AssessmentPageContent
             currentEmployee={currentEmployee}
             availablePeriods={availablePeriods}
           />

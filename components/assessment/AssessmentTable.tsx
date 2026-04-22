@@ -1,21 +1,26 @@
 'use client'
 
 import { useState } from 'react'
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { ClipboardCheck, Eye, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import AssessmentFormDialog from './AssessmentFormDialog'
+import dynamic from 'next/dynamic'
 import type { AssessmentStatus } from '@/lib/types/assessment.types'
+
+const AssessmentFormDialog = dynamic(() => import('./AssessmentFormDialog'), {
+  loading: () => null,
+  ssr: false
+})
 
 interface AssessmentTableProps {
   employees: AssessmentStatus[]
@@ -24,11 +29,11 @@ interface AssessmentTableProps {
   onAssessmentComplete: () => void
 }
 
-export default function AssessmentTable({ 
-  employees, 
-  period, 
-  loading, 
-  onAssessmentComplete 
+export default function AssessmentTable({
+  employees,
+  period,
+  loading,
+  onAssessmentComplete
 }: AssessmentTableProps) {
   const [selectedEmployee, setSelectedEmployee] = useState<AssessmentStatus | null>(null)
   const [showAssessmentDialog, setShowAssessmentDialog] = useState(false)
@@ -167,8 +172,8 @@ export default function AssessmentTable({
                         {Math.round(employee.completion_percentage)}%
                       </span>
                     </div>
-                    <Progress 
-                      value={employee.completion_percentage} 
+                    <Progress
+                      value={employee.completion_percentage}
                       className="h-2"
                     />
                   </div>

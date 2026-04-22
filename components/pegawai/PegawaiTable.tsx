@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import { deactivatePegawai, deletePegawai } from '@/lib/services/pegawai.service'
 import { Button } from '@/components/ui/button'
 import { Edit, Ban, CheckCircle, Trash2 } from 'lucide-react'
@@ -13,18 +13,18 @@ interface PegawaiTableProps {
   onRefresh: () => void
 }
 
-export function PegawaiTable({ pegawai, loading, onEdit, onRefresh }: PegawaiTableProps) {
+export const PegawaiTable = memo(function PegawaiTable({ pegawai, loading, onEdit, onRefresh }: PegawaiTableProps) {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
-  
+
   const handleDeactivate = async (pegawai: Pegawai) => {
     if (!confirm(`Apakah Anda yakin ingin menonaktifkan ${pegawai.full_name}?`)) {
       return
     }
-    
+
     setActionLoading(pegawai.id)
     const result = await deactivatePegawai(pegawai.id)
     setActionLoading(null)
-    
+
     if (result.success) {
       alert('Pegawai berhasil dinonaktifkan')
       onRefresh()
@@ -32,16 +32,16 @@ export function PegawaiTable({ pegawai, loading, onEdit, onRefresh }: PegawaiTab
       alert(`Gagal: ${result.error}`)
     }
   }
-  
+
   const handleDelete = async (pegawai: Pegawai) => {
     if (!confirm(`PERINGATAN: Apakah Anda yakin ingin menghapus ${pegawai.full_name}?\n\nTindakan ini akan menghapus:\n- Data pegawai\n- Semua data KPI dan realisasi terkait\n\nTindakan ini TIDAK DAPAT DIBATALKAN!`)) {
       return
     }
-    
+
     setActionLoading(pegawai.id)
     const result = await deletePegawai(pegawai.id)
     setActionLoading(null)
-    
+
     if (result.success) {
       alert('Pegawai berhasil dihapus')
       onRefresh()
@@ -49,7 +49,7 @@ export function PegawaiTable({ pegawai, loading, onEdit, onRefresh }: PegawaiTab
       alert(`Gagal: ${result.error}`)
     }
   }
-  
+
   if (loading) {
     return (
       <div className="text-center py-8">
@@ -57,7 +57,7 @@ export function PegawaiTable({ pegawai, loading, onEdit, onRefresh }: PegawaiTab
       </div>
     )
   }
-  
+
   if (pegawai.length === 0) {
     return (
       <div className="text-center py-8">
@@ -65,7 +65,7 @@ export function PegawaiTable({ pegawai, loading, onEdit, onRefresh }: PegawaiTab
       </div>
     )
   }
-  
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
@@ -144,4 +144,4 @@ export function PegawaiTable({ pegawai, loading, onEdit, onRefresh }: PegawaiTab
       </table>
     </div>
   )
-}
+})

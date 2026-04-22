@@ -13,34 +13,29 @@ import { DashboardService } from '@/lib/services/dashboard.service'
 export async function DashboardContent() {
   try {
     const supabase = await createClient()
-    
-    // OPTIMIZED: Parallel data fetching
-    const [
-      { data: { user } },
-      employeeResult
-    ] = await Promise.all([
-      supabase.auth.getUser(),
-      supabase
-        .from('m_employees')
-        .select(`
-          id, 
-          full_name, 
-          role, 
-          unit_id,
-          m_units!m_employees_unit_id_fkey (
-            name
-          )
-        `)
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
-        .single()
-    ])
-    
+
+    const { data: { user } } = await supabase.auth.getUser()
+
     if (!user) {
       redirect('/login')
     }
-    
+
+    const employeeResult = await supabase
+      .from('m_employees')
+      .select(`
+        id, 
+        full_name, 
+        role, 
+        unit_id,
+        m_units!m_employees_unit_id_fkey (
+          name
+        )
+      `)
+      .eq('user_id', user.id)
+      .single()
+
     const { data: employee, error } = employeeResult
-    
+
     if (error || !employee) {
       console.error('Employee fetch error:', error)
       redirect('/login?error=user_not_found')
@@ -115,7 +110,7 @@ export async function DashboardContent() {
 
         {employee.role === 'superadmin' && (
           <>
-            <DashboardFilters 
+            <DashboardFilters
               showUnitFilter={true}
               showPeriodFilter={true}
               showExport={true}
@@ -152,8 +147,8 @@ export async function DashboardContent() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <PerformanceChart 
-                data={performanceTrend} 
+              <PerformanceChart
+                data={performanceTrend}
                 type="bar"
                 title="Tren Performa KPI"
                 description="Performa 6 bulan terakhir"
