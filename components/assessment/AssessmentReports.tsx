@@ -50,8 +50,14 @@ interface PeriodComparison {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8']
 
-export default function AssessmentReports({ availablePeriods: propAvailablePeriods }: { availablePeriods: string[] }) {
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('')
+export default function AssessmentReports({
+  availablePeriods: propAvailablePeriods,
+  selectedPeriod: propSelectedPeriod
+}: {
+  availablePeriods: string[],
+  selectedPeriod?: string
+}) {
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(propSelectedPeriod || '')
   const [selectedUnit, setSelectedUnit] = useState<string>('all')
   const [reportData, setReportData] = useState<AssessmentReport | null>(null)
   const [periodComparison, setPeriodComparison] = useState<PeriodComparison | null>(null)
@@ -59,10 +65,17 @@ export default function AssessmentReports({ availablePeriods: propAvailablePerio
   const [availableUnits, setAvailableUnits] = useState<Array<{ id: string; name: string }>>([])
   const [loading, setLoading] = useState(false)
 
+  // Sync selected period from props if it changes
+  useEffect(() => {
+    if (propSelectedPeriod && propSelectedPeriod !== selectedPeriod) {
+      setSelectedPeriod(propSelectedPeriod)
+    }
+  }, [propSelectedPeriod])
+
   useEffect(() => {
     if (propAvailablePeriods && propAvailablePeriods.length > 0) {
       setPeriods(propAvailablePeriods)
-      if (!selectedPeriod && propAvailablePeriods.length > 0) {
+      if (!selectedPeriod && !propSelectedPeriod && propAvailablePeriods.length > 0) {
         setSelectedPeriod(propAvailablePeriods[0])
       }
     } else {
@@ -118,7 +131,7 @@ export default function AssessmentReports({ availablePeriods: propAvailablePerio
 
       const response = await fetch(`/api/assessment/reports?${params}`)
       const data = await response.json()
-      
+
       if (data.success) {
         setReportData(data.report)
       }
@@ -141,7 +154,7 @@ export default function AssessmentReports({ availablePeriods: propAvailablePerio
 
       const response = await fetch(`/api/assessment/reports?${params}`)
       const data = await response.json()
-      
+
       if (data.success) {
         setPeriodComparison(data.comparison)
       }
@@ -161,7 +174,7 @@ export default function AssessmentReports({ availablePeriods: propAvailablePerio
 
       const response = await fetch(`/api/assessment/export?${params}`)
       const blob = await response.blob()
-      
+
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -270,9 +283,8 @@ export default function AssessmentReports({ availablePeriods: propAvailablePerio
               <CardContent>
                 <div className="text-2xl font-bold">{reportData.completion_rate.toFixed(1)}%</div>
                 {periodComparison && (
-                  <p className={`text-xs flex items-center ${
-                    periodComparison.completion_rate_change >= 0 ? 'text-green-600' : 'text-red-600'
-                  }`}>
+                  <p className={`text-xs flex items-center ${periodComparison.completion_rate_change >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
                     <TrendingUp className="h-3 w-3 mr-1" />
                     {periodComparison.completion_rate_change >= 0 ? '+' : ''}
                     {periodComparison.completion_rate_change.toFixed(1)}% dari periode sebelumnya
@@ -289,9 +301,8 @@ export default function AssessmentReports({ availablePeriods: propAvailablePerio
               <CardContent>
                 <div className="text-2xl font-bold">{reportData.average_score.toFixed(1)}</div>
                 {periodComparison && (
-                  <p className={`text-xs flex items-center ${
-                    periodComparison.average_score_change >= 0 ? 'text-green-600' : 'text-red-600'
-                  }`}>
+                  <p className={`text-xs flex items-center ${periodComparison.average_score_change >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
                     <TrendingUp className="h-3 w-3 mr-1" />
                     {periodComparison.average_score_change >= 0 ? '+' : ''}
                     {periodComparison.average_score_change.toFixed(1)} dari periode sebelumnya
@@ -310,8 +321,8 @@ export default function AssessmentReports({ availablePeriods: propAvailablePerio
                     <span>Selesai</span>
                     <span className="font-medium">{reportData.status_distribution.completed}</span>
                   </div>
-                  <Progress 
-                    value={(reportData.status_distribution.completed / reportData.total_employees) * 100} 
+                  <Progress
+                    value={(reportData.status_distribution.completed / reportData.total_employees) * 100}
                     className="h-2"
                   />
                 </div>

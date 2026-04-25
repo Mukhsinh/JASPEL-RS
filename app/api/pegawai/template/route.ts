@@ -13,7 +13,6 @@ export async function GET() {
         'Jabatan': 'Software Engineer',
         'Email': 'john.doe@example.com',
         'Telepon': '081234567890',
-        'Alamat': 'Jl. Contoh No. 123',
         'Status Pajak': 'TK/0',
         'Nama Bank': 'BCA',
         'Nomor Rekening': '1234567890',
@@ -29,7 +28,6 @@ export async function GET() {
         'Jabatan': 'Sales Manager',
         'Email': 'jane.smith@example.com',
         'Telepon': '081234567891',
-        'Alamat': 'Jl. Contoh No. 456',
         'Status Pajak': 'K/1',
         'Nama Bank': 'Mandiri',
         'Nomor Rekening': '0987654321',
@@ -52,7 +50,6 @@ export async function GET() {
       { wch: 25 }, // Jabatan
       { wch: 30 }, // Email
       { wch: 15 }, // Telepon
-      { wch: 40 }, // Alamat
       { wch: 12 }, // Status Pajak
       { wch: 15 }, // Nama Bank
       { wch: 18 }, // Nomor Rekening
@@ -72,7 +69,6 @@ export async function GET() {
       { 'Kolom': 'Jabatan', 'Keterangan': 'Jabatan pegawai (opsional)' },
       { 'Kolom': 'Email', 'Keterangan': 'Email pegawai (wajib diisi, harus unik)' },
       { 'Kolom': 'Telepon', 'Keterangan': 'Nomor telepon (opsional)' },
-      { 'Kolom': 'Alamat', 'Keterangan': 'Alamat lengkap (opsional)' },
       { 'Kolom': 'Status Pajak', 'Keterangan': 'TK/0, TK/1, TK/2, TK/3, K/0, K/1, K/2, K/3 (default: TK/0)' },
       { 'Kolom': 'Nama Bank', 'Keterangan': 'Nama bank untuk transfer insentif (opsional)' },
       { 'Kolom': 'Nomor Rekening', 'Keterangan': 'Nomor rekening bank (opsional)' },

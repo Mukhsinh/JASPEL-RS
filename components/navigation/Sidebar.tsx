@@ -69,11 +69,11 @@ function useAuth() {
       try {
         const supabase = createClient()
         const { data: { session } } = await supabase.auth.getSession()
-        
+
         if (session?.user) {
           // Get user role from metadata
           const role = session.user.user_metadata?.role || 'employee'
-          
+
           // Try to get employee data
           const { data: employeeData } = await supabase
             .from('m_employees')
@@ -171,11 +171,11 @@ function getMenuItems(role: string): MenuItem[] {
   if (role === 'superadmin') {
     return allMenuItems
   } else if (role === 'unit_manager') {
-    return allMenuItems.filter(item => 
+    return allMenuItems.filter(item =>
       ['dashboard', 'assessment', 'reports', 'notifications'].includes(item.id)
     )
   } else {
-    return allMenuItems.filter(item => 
+    return allMenuItems.filter(item =>
       ['dashboard', 'notifications'].includes(item.id)
     )
   }
@@ -188,7 +188,7 @@ export default function Sidebar() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [unitName, setUnitName] = useState('')
   const [companyInfo, setCompanyInfo] = useState<any>(null)
-  
+
   const pathname = usePathname()
   const { user, loading } = useAuth()
   const menuItems = user ? getMenuItems(user.role) : []
@@ -199,7 +199,7 @@ export default function Sidebar() {
 
     try {
       const supabase = createClient()
-      
+
       // Get company info
       const { data: settingsData } = await supabase
         .from('t_settings')
@@ -226,10 +226,10 @@ export default function Sidebar() {
 
       // Get notifications count
       const { count } = await supabase
-        .from('t_notifications')
+        .from('t_notification')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
-        .eq('is_read', false)
+        .eq('read', false)
 
       setUnreadCount(count || 0)
     } catch (error) {
@@ -306,9 +306,9 @@ export default function Sidebar() {
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-md">
                     {companyInfo?.logo ? (
-                      <img 
-                        src={companyInfo.logo} 
-                        alt="Logo" 
+                      <img
+                        src={companyInfo.logo}
+                        alt="Logo"
                         className="w-full h-full object-contain p-1"
                       />
                     ) : (
@@ -355,11 +355,11 @@ export default function Sidebar() {
                     <span className={cn(
                       'text-xs px-2 py-0.5 rounded-full font-medium',
                       user.role === 'superadmin' ? 'bg-purple-100 text-purple-700' :
-                      user.role === 'unit_manager' ? 'bg-blue-100 text-blue-700' :
-                      'bg-green-100 text-green-700'
+                        user.role === 'unit_manager' ? 'bg-blue-100 text-blue-700' :
+                          'bg-green-100 text-green-700'
                     )}>
                       {user.role === 'superadmin' ? 'Superadmin' :
-                       user.role === 'unit_manager' ? 'Manager Unit' : 'Pegawai'}
+                        user.role === 'unit_manager' ? 'Manager Unit' : 'Pegawai'}
                     </span>
                   </div>
                 </div>
@@ -400,7 +400,7 @@ export default function Sidebar() {
                       </>
                     )}
                   </Link>
-                  
+
                   {/* Tooltip for collapsed state */}
                   {isCollapsed && (
                     <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-sm rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">

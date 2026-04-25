@@ -13,25 +13,74 @@ interface AssessmentStatus {
   completion_percentage: number
 }
 
-async function getAssessmentStatus(unitId: string, period: string): Promise<AssessmentStatus[]> {
-  const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('v_assessment_status')
-    .select('*')
-    .eq('unit_id', unitId)
-    .eq('period', period)
-    .order('full_name')
+async function getAssessmentStatus(supabase: any, unitId: string | null, period: string): Promise<AssessmentStatus[]> {
+  // Fetch employees
+  let employeeQuery = supabase
+    .from('m_employees')
+    .select('id, full_name, unit_id, m_units(name)')
+    .eq('is_active', true)
 
-  if (error) {
-    throw new Error(`Failed to fetch assessment status: ${error.message}`)
+  if (unitId) {
+    employeeQuery = employeeQuery.eq('unit_id', unitId)
   }
-  return data || []
+
+  const { data: employees, error: empError } = await employeeQuery
+  if (empError) throw empError
+
+  // Fetch all indicators
+  const { data: indicators, error: indError } = await supabase
+    .from('m_kpi_indicators')
+    .select('id')
+    .eq('is_active', true)
+  if (indError) throw indError
+
+  const totalIndicatorsCount = indicators?.length || 0
+
+  // Fetch assessments for the period
+  const { data: assessments, error: assError } = await supabase
+    .from('t_kpi_assessments')
+    .select('employee_id, indicator_id, score')
+    .eq('period', period)
+  if (assError) throw assError
+
+  // Group assessments by employee
+  const assessmentMap = new Map<string, Set<string>>()
+  assessments?.forEach((ass: any) => {
+    if (ass.score !== null && ass.score !== undefined) {
+      if (!assessmentMap.has(ass.employee_id)) {
+        assessmentMap.set(ass.employee_id, new Set())
+      }
+      assessmentMap.get(ass.employee_id)?.add(ass.indicator_id)
+    }
+  })
+
+  return (employees || []).map((emp: any) => {
+    const assessedCount = assessmentMap.get(emp.id)?.size || 0
+    let status = 'Belum Dinilai'
+    if (assessedCount > 0) {
+      status = assessedCount === totalIndicatorsCount ? 'Selesai' : 'Sebagian'
+    }
+
+    return {
+      employee_id: emp.id,
+      full_name: emp.full_name,
+      unit_id: emp.unit_id,
+      unit_name: emp.m_units?.name || 'Unknown',
+      period: period,
+      total_indicators: totalIndicatorsCount,
+      assessed_indicators: assessedCount,
+      status: status,
+      completion_percentage: totalIndicatorsCount > 0
+        ? Math.round((assessedCount / totalIndicatorsCount) * 100)
+        : 0
+    }
+  })
 }
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
-    
+
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -58,7 +107,6 @@ export async function GET(request: NextRequest) {
     }
 
     if (employeeId) {
-      // Get status for specific employee
       // Authorization check for unit managers
       if (currentEmployee.role === 'unit_manager') {
         const { data: targetEmployee } = await supabase
@@ -69,15 +117,15 @@ export async function GET(request: NextRequest) {
 
         if (!targetEmployee || targetEmployee.unit_id !== currentEmployee.unit_id) {
           return NextResponse.json(
-            { error: 'You can only view status for employees in your unit' }, 
+            { error: 'You can only view status for employees in your unit' },
             { status: 403 }
           )
         }
       }
 
       // Get status for specific employee
-      const statuses = await getAssessmentStatus(currentEmployee.unit_id, period)
-      const employeeStatus = statuses.find((s: AssessmentStatus) => s.employee_id === employeeId)
+      const statuses = await getAssessmentStatus(supabase, currentEmployee.role === 'unit_manager' ? currentEmployee.unit_id : null, period)
+      const employeeStatus = statuses.find(s => s.employee_id === employeeId)
 
       if (!employeeStatus) {
         return NextResponse.json({ error: 'Employee status not found' }, { status: 404 })
@@ -85,46 +133,30 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({ status: employeeStatus })
     } else {
-      // Get status for all employees (filtered by role)
-      let statuses: AssessmentStatus[]
-      
-      if (currentEmployee.role === 'unit_manager') {
-        statuses = await getAssessmentStatus(currentEmployee.unit_id, period)
-      } else {
-        // Superadmin can see all employees - get all units
-        const { data: units } = await supabase
-          .from('m_units')
-          .select('id')
-          .eq('is_active', true)
-        
-        const allStatuses: AssessmentStatus[] = []
-        for (const unit of units || []) {
-          const unitStatuses = await getAssessmentStatus(unit.id, period)
-          allStatuses.push(...unitStatuses)
-        }
-        statuses = allStatuses
-      }
-      
+      // Get status for all employees based on role
+      const unitId = currentEmployee.role === 'unit_manager' ? currentEmployee.unit_id : null
+      const statuses = await getAssessmentStatus(supabase, unitId, period)
+
       // Calculate summary statistics
       const summary = {
         total_employees: statuses.length,
-        completed: statuses.filter((s: AssessmentStatus) => s.status === 'Selesai').length,
-        partial: statuses.filter((s: AssessmentStatus) => s.status === 'Sebagian').length,
-        not_started: statuses.filter((s: AssessmentStatus) => s.status === 'Belum Dinilai').length,
-        completion_rate: statuses.length > 0 
-          ? Math.round((statuses.filter((s: AssessmentStatus) => s.status === 'Selesai').length / statuses.length) * 100)
+        completed: statuses.filter(s => s.status === 'Selesai').length,
+        partial: statuses.filter(s => s.status === 'Sebagian').length,
+        not_started: statuses.filter(s => s.status === 'Belum Dinilai').length,
+        completion_rate: statuses.length > 0
+          ? Math.round((statuses.filter(s => s.status === 'Selesai').length / statuses.length) * 100)
           : 0
       }
 
-      return NextResponse.json({ 
+      return NextResponse.json({
         statuses,
-        summary 
+        summary
       })
     }
   } catch (error: any) {
     console.error('Assessment status GET error:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch assessment status' }, 
+      { error: 'Failed to fetch assessment status' },
       { status: 500 }
     )
   }

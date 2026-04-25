@@ -96,7 +96,7 @@ export default function AssessmentFormDialog({
 
   const loadKPIIndicators = async () => {
     try {
-      const response = await fetch(`/api/assessment/indicators?employee_id=${employee.employee_id}`)
+      const response = await fetch(`/api/assessment/indicators?employee_id=${employee.employee_id}&period=${period}`)
       if (response.ok) {
         const data = await response.json()
         setCategories(data.indicators || [])

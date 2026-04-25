@@ -57,53 +57,93 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (employeeError || !employee) {
+      console.error('Employee lookup error:', employeeError)
       return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
     }
 
-    // Get categories for the unit first
-    const { data: categories, error: categoriesError } = await supabase
+    console.log('[indicators] employee unit_id:', employee.unit_id)
+
+    // Get ALL categories (not filtered by unit_id) first, to check if data exists
+    const { data: allCategories, error: allCatError } = await supabase
       .from('m_kpi_categories')
-      .select('id, name, type')
-      .eq('unit_id', employee.unit_id)
+      .select('id, category_name, category, weight_percentage, unit_id')
       .eq('is_active', true)
 
-    if (categoriesError) {
-      return NextResponse.json({ error: `Failed to fetch categories: ${categoriesError.message}` }, { status: 500 })
+    console.log('[indicators] allCategories count:', allCategories?.length, 'error:', allCatError?.message)
+
+    // Now filter by unit - try the employee's unit first
+    let categories = allCategories?.filter(c => c.unit_id === employee.unit_id) || []
+
+    console.log('[indicators] filtered categories for unit:', categories.length)
+
+    // If no categories in employee's unit, return empty but with helpful message
+    if (categories.length === 0) {
+      // Check if there are global/shared categories (no unit filter)
+      // If still none, return properly
+      return NextResponse.json({
+        success: true,
+        indicators: [],
+        total_indicators: 0,
+        message: `Tidak ada kategori KPI yang dikonfigurasi untuk unit ini (unit_id: ${employee.unit_id}). Silakan konfigurasi KPI terlebih dahulu di halaman Konfigurasi KPI.`
+      })
     }
 
-    const categoryMap = new Map(categories?.map(c => [c.id, c]) || [])
+    const categoryMap = new Map(categories.map(c => [c.id, c]))
+    const categoryIds = categories.map(c => c.id)
 
     // Get indicators for the categories
     const { data: indicators, error: indicatorsError } = await supabase
       .from('m_kpi_indicators')
-      .select('id, name, target_value, weight_percentage, category_id')
+      .select('id, code, name, target_value, weight_percentage, category_id, measurement_unit, description')
       .eq('is_active', true)
-      .in('category_id', categories?.map(c => c.id) || [])
+      .in('category_id', categoryIds)
 
     if (indicatorsError) {
+      console.error('[indicators] indicators query error:', indicatorsError)
       return NextResponse.json({ error: `Failed to fetch indicators: ${indicatorsError.message}` }, { status: 500 })
     }
 
+    console.log('[indicators] indicators count:', indicators?.length)
+
     const indicatorIds = indicators?.map(i => i.id) || []
 
-    // Get sub indicators for the indicators
-    const { data: subIndicators, error: subIndicatorsError } = await supabase
-      .from('m_kpi_sub_indicators')
-      .select('id, indicator_id, code, name, target_value, weight_percentage, scoring_criteria, measurement_unit, description')
-      .eq('is_active', true)
-      .in('indicator_id', indicatorIds)
+    // Get sub indicators only if there are indicators
+    let subIndicators: any[] = []
+    if (indicatorIds.length > 0) {
+      const { data: subInds, error: subIndicatorsError } = await supabase
+        .from('m_kpi_sub_indicators')
+        .select('id, indicator_id, code, name, target_value, weight_percentage, scoring_criteria, measurement_unit, description')
+        .eq('is_active', true)
+        .in('indicator_id', indicatorIds)
 
-    if (subIndicatorsError) {
-      return NextResponse.json({ error: `Failed to fetch sub-indicators: ${subIndicatorsError.message}` }, { status: 500 })
+      if (subIndicatorsError) {
+        console.error('[indicators] sub-indicators query error:', subIndicatorsError)
+        return NextResponse.json({ error: `Failed to fetch sub-indicators: ${subIndicatorsError.message}` }, { status: 500 })
+      }
+      subIndicators = subInds || []
     }
 
-    // Group sub-indicators by indicator
+    console.log('[indicators] sub-indicators count:', subIndicators.length)
+
+    // Group and map sub-indicators by indicator
     const subIndicatorMap = new Map<string, any[]>()
-    subIndicators?.forEach(sub => {
+    subIndicators.forEach((sub: any) => {
       if (!subIndicatorMap.has(sub.indicator_id)) {
         subIndicatorMap.set(sub.indicator_id, [])
       }
-      subIndicatorMap.get(sub.indicator_id)!.push(sub)
+
+      subIndicatorMap.get(sub.indicator_id)!.push({
+        id: sub.id,
+        indicator_id: sub.indicator_id,
+        code: sub.code,
+        name: sub.name,
+        target_value: sub.target_value,
+        weight_percentage: sub.weight_percentage,
+        scoring_criteria: sub.scoring_criteria || [],
+        measurement_unit: sub.measurement_unit,
+        description: sub.description
+      })
+
     })
 
     // Get existing assessments
@@ -115,22 +155,33 @@ export async function GET(request: NextRequest) {
       .order('created_at')
 
     if (assessmentsError) {
+      console.error('[indicators] assessments query error:', assessmentsError)
       return NextResponse.json({ error: `Failed to fetch assessments: ${assessmentsError.message}` }, { status: 500 })
     }
 
-    const assessmentMap = new Map((existingAssessments || []).map(a => [a.indicator_id, a]))
+    // Map existing assessments to their indicator_id
+    const assessmentMap = new Map()
+    if (existingAssessments) {
+      existingAssessments.forEach((a: any) => {
+        assessmentMap.set(a.indicator_id, a)
+      })
+    }
 
     // Map indicators with current assessments and sub-indicators
-    const indicatorsWithAssessments = (indicators || []).map(indicator => {
+    const indicatorsWithAssessments = (indicators || []).map((indicator: any) => {
       const category = categoryMap.get(indicator.category_id)
       return {
         id: indicator.id,
+        code: indicator.code,
         name: indicator.name,
         target_value: indicator.target_value,
         weight_percentage: indicator.weight_percentage,
         category_id: indicator.category_id,
-        category_name: category?.name || 'Unknown Category',
-        category_type: category?.type || 'P1',
+        category_name: category?.category_name || 'Tanpa Kategori',
+        category_type: category?.category || 'Unknown',
+        category_weight: category?.weight_percentage || 0,
+        measurement_unit: indicator.measurement_unit,
+        description: indicator.description,
         sub_indicators: subIndicatorMap.get(indicator.id) || [],
         current_assessment: assessmentMap.get(indicator.id)
       }
@@ -138,38 +189,39 @@ export async function GET(request: NextRequest) {
 
     // Group indicators by category
     const groupedIndicators = indicatorsWithAssessments.reduce((acc: any, indicator: any) => {
-      const category = indicator.category_type
-      if (!acc[category]) {
-        acc[category] = {
-          category: category,
+      const categoryType = indicator.category_type || 'Unknown'
+      if (!acc[categoryType]) {
+        acc[categoryType] = {
+          category: categoryType,
           category_name: indicator.category_name,
+          weight_percentage: indicator.category_weight,
           indicators: []
         }
       }
-      acc[category].indicators.push({
-        id: indicator.id,
-        name: indicator.name,
-        target_value: indicator.target_value,
-        weight_percentage: indicator.weight_percentage,
-        current_assessment: indicator.current_assessment
-      })
+      acc[categoryType].indicators.push(indicator)
       return acc
     }, {})
 
-    // Convert to array and sort by category
+    // Convert to array and sort by category (P1, P2, P3)
     const categorizedIndicators = Object.values(groupedIndicators).sort((a: any, b: any) => {
-      const order = { 'P1': 1, 'P2': 2, 'P3': 3 }
-      return order[a.category as keyof typeof order] - order[b.category as keyof typeof order]
+      const order: Record<string, number> = { 'P1': 1, 'P2': 2, 'P3': 3 }
+      const orderA = order[a.category] || 99
+      const orderB = order[b.category] || 99
+      return orderA - orderB
     })
 
     return NextResponse.json({
+      success: true,
       indicators: categorizedIndicators,
       total_indicators: indicatorsWithAssessments.length
     })
   } catch (error: any) {
     console.error('Assessment indicators GET error:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch KPI indicators' },
+      {
+        error: 'Gagal memuat indikator KPI',
+        details: error instanceof Error ? error.message : String(error)
+      },
       { status: 500 }
     )
   }

@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Search, Filter, RefreshCw, BarChart3, AlertCircle } from 'lucide-react'
+import { Plus, Search, Filter, RefreshCw, BarChart3, AlertCircle } from 'lucide-react'
 import AssessmentTable from './AssessmentTable'
 import AssessmentReports from './AssessmentReports'
+import AddAssessmentPeriodDialog from './AddAssessmentPeriodDialog'
 import type { AssessmentStatus } from '@/lib/types/assessment.types'
 
 interface AssessmentPageContentProps {
@@ -22,10 +23,11 @@ interface AssessmentPageContentProps {
   availablePeriods: string[]
 }
 
-export default function AssessmentPageContent({ 
-  currentEmployee, 
-  availablePeriods 
+export default function AssessmentPageContent({
+  currentEmployee,
+  availablePeriods: availablePeriodsProp
 }: AssessmentPageContentProps) {
+  const [availablePeriods, setAvailablePeriods] = useState<string[]>(availablePeriodsProp || [])
   const [selectedPeriod, setSelectedPeriod] = useState<string>(availablePeriods[0] || '')
   const [employees, setEmployees] = useState<AssessmentStatus[]>([])
   const [filteredEmployees, setFilteredEmployees] = useState<AssessmentStatus[]>([])
@@ -33,6 +35,7 @@ export default function AssessmentPageContent({
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [isAddPeriodDialogOpen, setIsAddPeriodDialogOpen] = useState(false)
   const [summary, setSummary] = useState({
     total_employees: 0,
     completed: 0,
@@ -41,13 +44,29 @@ export default function AssessmentPageContent({
     completion_rate: 0
   })
 
+  // Load available periods from API
+  const loadPeriods = async () => {
+    try {
+      const response = await fetch('/api/assessment/reports?action=periods')
+      const data = await response.json()
+      if (data.success && data.periods) {
+        setAvailablePeriods(data.periods)
+        if (!selectedPeriod && data.periods.length > 0) {
+          setSelectedPeriod(data.periods[0])
+        }
+      }
+    } catch (error) {
+      console.error('Error loading periods:', error)
+    }
+  }
+
   // Load employees for assessment
   const loadEmployees = async () => {
     if (!selectedPeriod) return
 
     setLoading(true)
     setError(null)
-    
+
     try {
       const response = await fetch(`/api/assessment/employees?period=${selectedPeriod}`)
       if (response.ok) {
@@ -94,7 +113,7 @@ export default function AssessmentPageContent({
 
     // Apply search filter
     if (searchTerm) {
-      filtered = filtered.filter(emp => 
+      filtered = filtered.filter(emp =>
         emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         emp.unit_name.toLowerCase().includes(searchTerm.toLowerCase())
       )
@@ -153,18 +172,29 @@ export default function AssessmentPageContent({
             <CardTitle className="text-sm font-medium">Periode Penilaian</CardTitle>
           </CardHeader>
           <CardContent>
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-              <SelectTrigger>
-                <SelectValue placeholder="Pilih periode" />
-              </SelectTrigger>
-              <SelectContent>
-                {availablePeriods.map(period => (
-                  <SelectItem key={period} value={period}>
-                    {period}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex flex-col gap-2">
+              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih periode" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availablePeriods.map(period => (
+                    <SelectItem key={period} value={period}>
+                      {period}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs"
+                onClick={() => setIsAddPeriodDialogOpen(true)}
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Tambah Periode
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -197,8 +227,8 @@ export default function AssessmentPageContent({
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">{summary.completion_rate}%</div>
             <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-              <div 
-                className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                 style={{ width: `${summary.completion_rate}%` }}
               />
             </div>
@@ -284,9 +314,25 @@ export default function AssessmentPageContent({
         </TabsContent>
 
         <TabsContent value="reports">
-          <AssessmentReports availablePeriods={availablePeriods} />
+          <AssessmentReports
+            availablePeriods={availablePeriods}
+            selectedPeriod={selectedPeriod}
+          />
         </TabsContent>
       </Tabs>
+
+      <AddAssessmentPeriodDialog
+        isOpen={isAddPeriodDialogOpen}
+        onClose={() => setIsAddPeriodDialogOpen(false)}
+        onSelect={(period) => {
+          if (!availablePeriods.includes(period)) {
+            const newList = [period, ...availablePeriods].sort((a, b) => b.localeCompare(a))
+            setAvailablePeriods(newList)
+          }
+          setSelectedPeriod(period)
+        }}
+        existingPeriods={availablePeriods}
+      />
     </div>
   )
 }

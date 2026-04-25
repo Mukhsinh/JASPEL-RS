@@ -18,22 +18,22 @@ export async function GET(request: NextRequest) {
     switch (action) {
       case 'periods':
         return await getAvailablePeriods(supabase)
-      
+
       case 'units':
         return await getAvailableUnits(supabase, user)
-      
+
       case 'report':
         if (!period) {
           return NextResponse.json({ success: false, error: 'Period is required' }, { status: 400 })
         }
         return await getAssessmentReport(supabase, user, period, unitId)
-      
+
       case 'comparison':
         if (!period) {
           return NextResponse.json({ success: false, error: 'Period is required' }, { status: 400 })
         }
         return await getPeriodComparison(supabase, user, period, unitId)
-      
+
       default:
         return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 })
     }
@@ -50,7 +50,6 @@ async function getAvailablePeriods(supabase: any) {
   const { data, error } = await supabase
     .from('t_pool')
     .select('period')
-    .in('status', ['approved', 'distributed'])
     .order('period', { ascending: false })
 
   if (error) {
@@ -96,11 +95,11 @@ async function getAvailableUnits(supabase: any, user: any) {
 async function getAssessmentReport(supabase: any, user: any, period: string, unitId?: string | null) {
   const userRole = user.user_metadata?.role
 
-  // Build base query for assessment status
-  let statusQuery = supabase
-    .from('v_assessment_status')
-    .select('*')
-    .eq('period', period)
+  // Build base query for employees
+  let employeeQuery = supabase
+    .from('m_employees')
+    .select('id, full_name, unit_id, m_units(name)')
+    .eq('is_active', true)
 
   // Apply unit filtering based on role
   if (userRole === 'unit_manager') {
@@ -111,19 +110,19 @@ async function getAssessmentReport(supabase: any, user: any, period: string, uni
       .single()
 
     if (userEmployee) {
-      statusQuery = statusQuery.eq('unit_id', userEmployee.unit_id)
+      employeeQuery = employeeQuery.eq('unit_id', userEmployee.unit_id)
     }
   } else if (unitId && unitId !== 'all') {
-    statusQuery = statusQuery.eq('unit_id', unitId)
+    employeeQuery = employeeQuery.eq('unit_id', unitId)
   }
 
-  const { data: statusData, error: statusError } = await statusQuery
+  const { data: employeesData, error: employeeError } = await employeeQuery
 
-  if (statusError) {
-    return NextResponse.json({ success: false, error: statusError.message }, { status: 500 })
+  if (employeeError) {
+    return NextResponse.json({ success: false, error: employeeError.message }, { status: 500 })
   }
 
-  if (!statusData || statusData.length === 0) {
+  if (!employeesData || employeesData.length === 0) {
     return NextResponse.json({
       success: true,
       report: {
@@ -142,12 +141,52 @@ async function getAssessmentReport(supabase: any, user: any, period: string, uni
     })
   }
 
-  // Calculate summary statistics
-  const totalEmployees = statusData.length
-  const assessedEmployees = statusData.filter((s: any) => s.assessed_indicators > 0).length
-  const completedEmployees = statusData.filter((s: any) => s.status === 'Selesai').length
-  const partialEmployees = statusData.filter((s: any) => s.status === 'Sebagian').length
-  const notStartedEmployees = statusData.filter((s: any) => s.status === 'Belum Dinilai').length
+  // Get KPI indicators count per unit
+  const { data: indicatorsData } = await supabase
+    .from('m_kpi_indicators')
+    .select('id, category_id, m_kpi_categories(unit_id)')
+    .eq('is_active', true)
+
+  const indicatorsCountByUnit = (indicatorsData || []).reduce((acc: any, curr: any) => {
+    const uId = curr.m_kpi_categories?.unit_id
+    if (uId) acc[uId] = (acc[uId] || 0) + 1
+    return acc
+  }, {})
+
+  // Get assessments for current period
+  const { data: assessmentsCountData } = await supabase
+    .from('t_kpi_assessments')
+    .select('employee_id, indicator_id')
+    .eq('period', period)
+
+  const assessmentsCountByEmployee = (assessmentsCountData || []).reduce((acc: any, curr: any) => {
+    acc[curr.employee_id] = (acc[curr.employee_id] || 0) + 1
+    return acc
+  }, {})
+
+  // Calculate status summary
+  let assessedEmployees = 0
+  let completedEmployees = 0
+  let partialEmployees = 0
+  let notStartedEmployees = 0
+
+  employeesData.forEach((emp: any) => {
+    const total = indicatorsCountByUnit[emp.unit_id] || 0
+    const assessed = assessmentsCountByEmployee[emp.id] || 0
+
+    if (assessed > 0) {
+      assessedEmployees++
+      if (assessed >= total) {
+        completedEmployees++
+      } else {
+        partialEmployees++
+      }
+    } else {
+      notStartedEmployees++
+    }
+  })
+
+  const totalEmployees = employeesData.length
   const completionRate = totalEmployees > 0 ? (completedEmployees / totalEmployees) * 100 : 0
 
   // Get detailed assessment data for score calculations
@@ -229,11 +268,11 @@ async function getAssessmentReport(supabase: any, user: any, period: string, uni
   })
 
   // Calculate averages
-  const p1Average = categoryScores.p1.length > 0 ? 
+  const p1Average = categoryScores.p1.length > 0 ?
     categoryScores.p1.reduce((a: number, b: number) => a + b, 0) / categoryScores.p1.length : 0
-  const p2Average = categoryScores.p2.length > 0 ? 
+  const p2Average = categoryScores.p2.length > 0 ?
     categoryScores.p2.reduce((a: number, b: number) => a + b, 0) / categoryScores.p2.length : 0
-  const p3Average = categoryScores.p3.length > 0 ? 
+  const p3Average = categoryScores.p3.length > 0 ?
     categoryScores.p3.reduce((a: number, b: number) => a + b, 0) / categoryScores.p3.length : 0
 
   const overallAverage = assessmentData && assessmentData.length > 0 ?
@@ -263,7 +302,7 @@ async function getAssessmentReport(supabase: any, user: any, period: string, uni
   const report = {
     period,
     unit_id: unitId,
-    unit_name: unitId && unitId !== 'all' ? statusData[0]?.unit_name : null,
+    unit_name: unitId && unitId !== 'all' ? (employeesData[0] as any)?.m_units?.name : null,
     total_employees: totalEmployees,
     assessed_employees: assessedEmployees,
     completion_rate: completionRate,

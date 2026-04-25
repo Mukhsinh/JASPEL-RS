@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import * as XLSX from 'xlsx'
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const userClient = await createClient()
+    const supabaseAdmin = await createAdminClient()
+
+    // 1. Verify user is superadmin using the user's client
+    const { data: { user }, error: authError } = await userClient.auth.getUser()
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -16,9 +18,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    // 2. Parse file
     const formData = await request.formData()
     const file = formData.get('file') as File
-    
+
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
@@ -26,7 +29,16 @@ export async function POST(request: NextRequest) {
     const buffer = await file.arrayBuffer()
     const workbook = XLSX.read(buffer)
     const worksheet = workbook.Sheets[workbook.SheetNames[0]]
-    const data = XLSX.utils.sheet_to_json(worksheet)
+    const rawData = XLSX.utils.sheet_to_json(worksheet) as Record<string, any>[]
+
+    // Normalize data: Trim all headers and values
+    const data = rawData.map(row => {
+      const normalized: Record<string, any> = {}
+      for (const key in row) {
+        normalized[key.trim()] = typeof row[key] === 'string' ? row[key].trim() : row[key]
+      }
+      return normalized
+    })
 
     const results = {
       success: 0,
@@ -34,107 +46,142 @@ export async function POST(request: NextRequest) {
       errors: [] as string[]
     }
 
-    for (const row of data as any[]) {
+    // 3. Process records one by one using Admin Client
+    for (const row of data) {
+      const employeeCode = row['Kode Pegawai']?.toString()
+
       try {
-        const employeeCode = row['Kode Pegawai']?.toString().trim()
-        const nik = row['NIK']?.toString().trim()
-        const fullName = row['Nama Lengkap']?.toString().trim()
-        const unitCode = row['Kode Unit']?.toString().trim()
-        const position = row['Jabatan']?.toString().trim()
-        const email = row['Email']?.toString().trim().toLowerCase()
-        const phone = row['Telepon']?.toString().trim()
-        const address = row['Alamat']?.toString().trim()
-        const taxStatus = row['Status Pajak']?.toString().trim() || 'TK/0'
-        const bankName = row['Nama Bank']?.toString().trim()
-        const bankAccountNumber = row['Nomor Rekening']?.toString().trim()
-        const bankAccountName = row['Nama Pemilik Rekening']?.toString().trim()
-        const roleStr = row['Role']?.toString().trim().toLowerCase()
-        const status = row['Status']?.toString().trim().toLowerCase()
+        const nik = row['NIK']?.toString()
+        const fullName = row['Nama Lengkap']?.toString()
+        const unitCode = row['Kode Unit']?.toString()
+        const position = row['Jabatan']?.toString()
+        const email = row['Email']?.toString().toLowerCase()
+        const phone = row['Telepon']?.toString()
+        const taxStatus = row['Status Pajak']?.toString() || 'TK/0'
+        const bankName = row['Nama Bank']?.toString()
+        const bankAccountNumber = row['Nomor Rekening']?.toString()
+        const bankAccountName = row['Nama Pemilik Rekening']?.toString()
+        const roleStr = row['Role']?.toString().toLowerCase()
+        const status = row['Status']?.toString().toLowerCase()
 
         if (!employeeCode || !fullName || !unitCode || !email || !roleStr) {
-          results.failed++
-          results.errors.push(`Baris "${employeeCode || 'kosong'}": Data wajib tidak lengkap`)
-          continue
+          throw new Error('Data wajib tidak lengkap (Kode Pegawai, Nama, Kode Unit, Email, Role)')
         }
 
-        // Get unit_id from code
-        const { data: unit, error: unitError } = await supabase
+        // Validate values
+        const validRoles = ['superadmin', 'unit_manager', 'employee']
+        const normalizedRole = validRoles.includes(roleStr) ? roleStr : 'employee'
+
+        const validTaxStatus = ['TK/0', 'TK/1', 'TK/2', 'TK/3', 'K/0', 'K/1', 'K/2', 'K/3']
+        const normalizedTaxStatus = validTaxStatus.includes(taxStatus) ? taxStatus : 'TK/0'
+
+        // --- Match unit ---
+        const { data: units, error: unitFetchError } = await supabaseAdmin
           .from('m_units')
-          .select('id')
-          .eq('code', unitCode)
-          .single()
+          .select('id, code, name')
+          .or(`code.eq."${unitCode}",name.ilike."${unitCode}"`)
 
-        if (unitError || !unit) {
-          results.failed++
-          results.errors.push(`Baris "${employeeCode}": Unit dengan kode "${unitCode}" tidak ditemukan`)
-          continue
+        if (unitFetchError) throw unitFetchError
+        let unit = units && units.length > 0 ? units[0] : null
+
+        if (!unit) {
+          const parts = unitCode.split(/[\s,]+/).filter((p: string) => p.length > 2)
+          for (const part of parts) {
+            const { data: fuzzyUnits } = await supabaseAdmin
+              .from('m_units')
+              .select('id, code, name')
+              .ilike('name', `%${part}%`)
+
+            if (fuzzyUnits && fuzzyUnits.length > 0) {
+              unit = fuzzyUnits[0]
+              break
+            }
+          }
         }
 
-        // Check if employee exists
-        const { data: existing } = await supabase
+        if (!unit) {
+          throw new Error(`Unit "${unitCode}" tidak ditemukan di database m_units`)
+        }
+
+        // --- Check if employee exists ---
+        const { data: existing, error: checkError } = await supabaseAdmin
           .from('m_employees')
           .select('id, user_id')
           .eq('employee_code', employeeCode)
-          .single()
+          .maybeSingle()
 
+        if (checkError) throw checkError
+
+        // --- Prepare Auth User ---
+        let authUserId: string | null = null
+        const { data: { users: authUsers }, error: listError } = await supabaseAdmin.auth.admin.listUsers()
+        if (listError) throw listError
+
+        const existingAuthUser = authUsers?.find(u => u.email === email)
+
+        if (existingAuthUser) {
+          authUserId = existingAuthUser.id
+          await supabaseAdmin.auth.admin.updateUserById(authUserId, {
+            user_metadata: { role: normalizedRole, full_name: fullName }
+          })
+        } else {
+          const tempPassword = `JASPEL_${employeeCode}_${Math.random().toString(36).slice(2, 8)}`
+          const { data: newAuthUser, error: createAuthError } = await supabaseAdmin.auth.admin.createUser({
+            email,
+            password: tempPassword,
+            email_confirm: true,
+            user_metadata: { role: normalizedRole, full_name: fullName }
+          })
+          if (createAuthError) throw createAuthError
+          authUserId = newAuthUser?.user?.id ?? null
+        }
+
+        // --- Save Employee Data ---
         const employeeData = {
           employee_code: employeeCode,
-          nik: nik || null,
           full_name: fullName,
           unit_id: unit.id,
+          user_id: authUserId,
+          nik: nik || null,
           position: position || null,
-          email,
           phone: phone || null,
-          address: address || null,
-          tax_status: taxStatus,
+          tax_status: normalizedTaxStatus,
           bank_name: bankName || null,
           bank_account_number: bankAccountNumber || null,
           bank_account_name: bankAccountName || null,
-          role: roleStr,
-          is_active: status === 'aktif',
+          role: normalizedRole,
+          is_active: status ? status === 'aktif' : true,
           updated_at: new Date().toISOString()
         }
 
         if (existing) {
-          // Update existing employee
-          const { error } = await supabase
+          const { error: updateError } = await supabaseAdmin
             .from('m_employees')
             .update(employeeData)
             .eq('id', existing.id)
-
-          if (error) throw error
-
-          // Update auth user metadata if user_id exists
-          if (existing.user_id) {
-            await supabase.auth.admin.updateUserById(existing.user_id, {
-              email,
-              user_metadata: {
-                role: roleStr,
-                full_name: fullName
-              }
-            })
-          }
+          if (updateError) throw updateError
         } else {
-          // Insert new employee
-          const { error } = await supabase
+          const { error: insertError } = await supabaseAdmin
             .from('m_employees')
             .insert(employeeData)
-
-          if (error) throw error
+          if (insertError) throw insertError
         }
 
         results.success++
       } catch (error: any) {
+        console.error(`[IMPORT ERROR] Row ${employeeCode || 'Unknown'}:`, error)
         results.failed++
-        results.errors.push(`Baris "${row['Kode Pegawai']}": ${error.message}`)
+        // Extract meaningful message even from Supabase error objects
+        const errorMsg = error.message || error.details || JSON.stringify(error)
+        results.errors.push(`Baris "${employeeCode || 'Unknown'}": ${errorMsg}`)
       }
     }
 
     return NextResponse.json(results)
   } catch (error: any) {
-    console.error('Error importing pegawai:', error)
+    console.error('CRITICAL: Error importing pegawai:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to import pegawai' },
+      { error: error.message || 'Gagal memproses data import' },
       { status: 500 }
     )
   }

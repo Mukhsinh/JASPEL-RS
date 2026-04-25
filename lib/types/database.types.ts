@@ -129,7 +129,6 @@ export interface Database {
           unit_id: string
           position: string | null
           phone: string | null
-          address: string | null
           nik: string | null
           bank_name: string | null
           bank_account_number: string | null
@@ -138,6 +137,9 @@ export interface Database {
           role?: 'superadmin' | 'unit_manager' | 'employee'
           email?: string
           tax_status: string
+          employee_status: 'ASN' | 'BLUD'
+          tax_type: 'Final' | 'TER'
+          pns_grade: number
           is_active: boolean
           created_at: string
           updated_at: string
@@ -150,7 +152,6 @@ export interface Database {
           unit_id: string
           position?: string | null
           phone?: string | null
-          address?: string | null
           nik?: string | null
           bank_name?: string | null
           bank_account_number?: string | null
@@ -159,6 +160,9 @@ export interface Database {
           role?: 'superadmin' | 'unit_manager' | 'employee'
           email?: string
           tax_status?: string
+          employee_status?: 'ASN' | 'BLUD'
+          tax_type?: 'Final' | 'TER'
+          pns_grade?: number
           is_active?: boolean
           created_at?: string
           updated_at?: string
@@ -171,7 +175,6 @@ export interface Database {
           unit_id?: string
           position?: string | null
           phone?: string | null
-          address?: string | null
           nik?: string | null
           bank_name?: string | null
           bank_account_number?: string | null
@@ -180,6 +183,9 @@ export interface Database {
           role?: 'superadmin' | 'unit_manager' | 'employee'
           email?: string
           tax_status?: string
+          employee_status?: 'ASN' | 'BLUD'
+          tax_type?: 'Final' | 'TER'
+          pns_grade?: number
           is_active?: boolean
           created_at?: string
           updated_at?: string
@@ -472,7 +478,7 @@ export interface UserWithEmployee {
   id: string
   email: string
   role: 'superadmin' | 'unit_manager' | 'employee'
-  
+
   // From m_employees
   employeeId: string
   employeeCode: string
@@ -505,7 +511,7 @@ export interface UpdateUserInput {
   email?: string
   password?: string
   role?: 'superadmin' | 'unit_manager' | 'employee'
-  
+
   // Employee fields
   employeeCode?: string
   fullName?: string
@@ -555,8 +561,10 @@ export interface Pegawai {
   unit_id: string
   position?: string | null
   tax_status: string
+  employee_status: 'ASN' | 'BLUD'
+  tax_type: 'Final' | 'TER'
+  pns_grade: number
   phone?: string | null
-  address?: string | null
   nik?: string | null
   bank_name?: string | null
   bank_account_number?: string | null
@@ -576,8 +584,10 @@ export interface CreatePegawaiData {
   unit_id: string
   position?: string | null
   tax_status?: string
+  employee_status?: 'ASN' | 'BLUD'
+  tax_type?: 'Final' | 'TER'
+  pns_grade?: number
   phone?: string | null
-  address?: string | null
   nik?: string | null
   bank_name?: string | null
   bank_account_number?: string | null
@@ -590,8 +600,10 @@ export interface UpdatePegawaiData {
   unit_id?: string
   position?: string | null
   tax_status?: string
+  employee_status?: 'ASN' | 'BLUD'
+  tax_type?: 'Final' | 'TER'
+  pns_grade?: number
   phone?: string | null
-  address?: string | null
   nik?: string | null
   bank_name?: string | null
   bank_account_number?: string | null
