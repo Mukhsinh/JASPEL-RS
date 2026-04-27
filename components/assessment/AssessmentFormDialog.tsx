@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Save, AlertCircle, Target, TrendingUp } from 'lucide-react'
+import { Save, AlertCircle, Target, TrendingUp, Copy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AssessmentStatus } from '@/lib/types/assessment.types'
 import type { ScoringCriterion } from '@/lib/types/kpi.types'
@@ -84,6 +84,7 @@ export default function AssessmentFormDialog({
   const [assessments, setAssessments] = useState<Record<string, AssessmentData>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [copyingPrevious, setCopyingPrevious] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Load KPI indicators and existing assessments
@@ -272,6 +273,42 @@ export default function AssessmentFormDialog({
       console.error('Error saving assessments:', error)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleCopyPrevious = async () => {
+    setCopyingPrevious(true)
+    setError(null)
+    try {
+      const response = await fetch(`/api/assessment/previous?employee_id=${employee.employee_id}&current_period=${period}`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.assessments && data.assessments.length > 0) {
+          const assessmentMap: Record<string, AssessmentData> = {}
+
+          data.assessments.forEach((assessment: any) => {
+            assessmentMap[assessment.indicator_id] = {
+              indicator_id: assessment.indicator_id,
+              realization_value: assessment.realization_value,
+              achievement_percentage: assessment.achievement_percentage || 0,
+              score: assessment.score || 0,
+              notes: assessment.notes || '',
+              sub_assessments: assessment.sub_assessments || []
+            }
+          })
+
+          setAssessments((prev) => ({ ...prev, ...assessmentMap }))
+        } else {
+          setError('Tidak ada data penilaian sebelumnya untuk disalin.')
+        }
+      } else {
+        setError('Gagal menyalin penilaian sebelumnya.')
+      }
+    } catch (error) {
+      console.error('Error copying previous assessments:', error)
+      setError('Terjadi kesalahan saat menyalin data.')
+    } finally {
+      setCopyingPrevious(false)
     }
   }
 
@@ -505,14 +542,25 @@ export default function AssessmentFormDialog({
           )}
         </div>
 
-        <div className="flex justify-end gap-3 pt-4 border-t">
-          <Button variant="outline" onClick={onClose} disabled={saving}>
-            Batal
+        <div className="flex justify-between items-center pt-4 border-t w-full">
+          <Button
+            variant="outline"
+            className="text-blue-600 border-blue-200 hover:bg-blue-50"
+            onClick={handleCopyPrevious}
+            disabled={saving || copyingPrevious || loading}
+          >
+            <Copy className="h-4 w-4 mr-2" />
+            {copyingPrevious ? 'Menyalin...' : 'Salin Penilaian'}
           </Button>
-          <Button onClick={handleSave} disabled={saving || loading}>
-            <Save className="h-4 w-4 mr-2" />
-            {saving ? 'Menyimpan...' : 'Simpan Penilaian'}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose} disabled={saving}>
+              Batal
+            </Button>
+            <Button onClick={handleSave} disabled={saving || loading}>
+              <Save className="h-4 w-4 mr-2" />
+              {saving ? 'Menyimpan...' : 'Simpan Penilaian'}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

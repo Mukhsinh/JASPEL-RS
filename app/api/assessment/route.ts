@@ -172,13 +172,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Get current user's employee record
-    const { data: currentEmployee } = await supabase
+    const { data: currentEmployee, error: empError } = await supabase
       .from('m_employees')
       .select('id, role, unit_id')
-      .eq('email', user.email)
+      .or(`email.eq.${user.email},user_id.eq.${user.id}`)
       .single()
 
-    if (!currentEmployee) {
+    if (empError || !currentEmployee) {
+      console.error('Employee mapping error:', empError, 'for user:', user.email, user.id);
       return NextResponse.json({ error: 'Employee record not found' }, { status: 404 })
     }
 
@@ -227,13 +228,14 @@ export async function PUT(request: NextRequest) {
     }
 
     // Get current user's employee record
-    const { data: currentEmployee } = await supabase
+    const { data: currentEmployee, error: empError } = await supabase
       .from('m_employees')
       .select('id, role, unit_id')
-      .eq('email', user.email)
+      .or(`email.eq.${user.email},user_id.eq.${user.id}`)
       .single()
 
-    if (!currentEmployee) {
+    if (empError || !currentEmployee) {
+      console.error('Employee mapping error:', empError, 'for user:', user.email, user.id);
       return NextResponse.json({ error: 'Employee record not found' }, { status: 404 })
     }
 
