@@ -263,10 +263,16 @@ export default function Sidebar() {
     setIsMobileOpen(false)
   }, [])
 
-  if (loading) {
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
+  if (!isMounted || loading) {
     return (
-      <div className="h-screen w-64 bg-white border-r border-gray-200 animate-pulse">
-        <div className="p-4">
+      <aside className="fixed left-0 top-0 h-screen w-72 bg-white border-r border-gray-200 hidden lg:block z-50">
+        <div className="p-4 animate-pulse">
           <div className="h-8 bg-gray-300 rounded mb-4"></div>
           <div className="space-y-2">
             {[...Array(6)].map((_, i) => (
@@ -274,7 +280,7 @@ export default function Sidebar() {
             ))}
           </div>
         </div>
-      </div>
+      </aside>
     )
   }
 
