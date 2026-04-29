@@ -119,13 +119,16 @@ export async function generateIncentiveSlipPDF(data: IncentiveSlipData): Promise
  */
 export async function generateSummaryReportPDF(
   results: Array<{
-    employeeCode: string
-    employeeName: string
+    employee_code: string
+    employee_name: string
     unit: string
-    finalScore: number
-    grossIncentive: number
-    taxAmount: number
-    netIncentive: number
+    total_score: number | string
+    gross_incentive: number | string
+    tax_amount: number | string
+    net_incentive: number | string
+    p1_score?: string
+    p2_score?: string
+    p3_score?: string
   }>,
   period: string
 ): Promise<Uint8Array> {
@@ -140,21 +143,32 @@ export async function generateSummaryReportPDF(
 
   autoTable(doc, {
     startY: 50,
-    head: [['No', 'NIP/NIK', 'Nama Pegawai', 'Unit', 'Skor Akhir', 'Insentif Bruto', 'Pajak', 'Insentif Neto']],
+    head: [['No', 'NIP/NIK', 'Nama Pegawai', 'Unit', 'P1', 'P2', 'P3', 'Skor Akhir', 'Insentif Bruto', 'Pajak', 'Insentif Neto']],
     body: results.map((r, i) => [
       i + 1,
-      r.employeeCode,
-      r.employeeName,
+      r.employee_code || '-',
+      r.employee_name,
       r.unit,
-      r.finalScore.toFixed(2),
-      r.grossIncentive.toLocaleString('id-ID'),
-      r.taxAmount.toLocaleString('id-ID'),
-      r.netIncentive.toLocaleString('id-ID')
+      r.p1_score || '-',
+      r.p2_score || '-',
+      r.p3_score || '-',
+      typeof r.total_score === 'number' ? r.total_score.toFixed(2) : r.total_score,
+      parseFloat(String(r.gross_incentive)).toLocaleString('id-ID'),
+      parseFloat(String(r.tax_amount)).toLocaleString('id-ID'),
+      parseFloat(String(r.net_incentive)).toLocaleString('id-ID')
     ]),
     theme: 'grid',
     headStyles: { fillColor: [44, 62, 80], textColor: 255 },
-    styles: { fontSize: 9 }
+    styles: { fontSize: 8 }
   })
+
+  // Footer for landscape
+  const pageHeight = doc.internal.pageSize.height
+  const footerSetting = await getSetting('footer')
+  const footerText = footerSetting?.data?.text || 'Laporan dihasilkan secara otomatis oleh JASPEL System'
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'italic')
+  doc.text(footerText, 148, pageHeight - 10, { align: 'center' })
 
   return new Uint8Array(doc.output('arraybuffer'))
 }
@@ -163,11 +177,26 @@ export async function generateSummaryReportPDF(
  * Export report to PDF
  */
 export async function exportToPDF(options: ReportExportOptions): Promise<Uint8Array> {
-  if (options.reportType === 'incentive-slip') {
-    if (options.data.length > 0) {
-      return await generateIncentiveSlipPDF(options.data[0])
+  if (options.reportType === 'employee-slip') {
+    // Current mapping for slip
+    const slipData: IncentiveSlipData = {
+      period: options.period,
+      employeeCode: options.data[0].employee_code || '-',
+      employeeName: options.data[0].employee_name,
+      unit: options.data[0].unit,
+      taxStatus: 'Non-PKP', // Mock
+      p1Score: parseFloat(options.data[0].p1_score) || 0,
+      p2Score: parseFloat(options.data[0].p2_score) || 0,
+      p3Score: parseFloat(options.data[0].p3_score) || 0,
+      p1Weighted: parseFloat(options.data[0].p1_score) || 0,
+      p2Weighted: parseFloat(options.data[0].p2_score) || 0,
+      p3Weighted: parseFloat(options.data[0].p3_score) || 0,
+      finalScore: parseFloat(options.data[0].total_score) || 0,
+      grossIncentive: parseFloat(String(options.data[0].gross_incentive).replace(/,/g, '')) || 0,
+      taxAmount: parseFloat(String(options.data[0].tax_amount).replace(/,/g, '')) || 0,
+      netIncentive: parseFloat(String(options.data[0].net_incentive).replace(/,/g, '')) || 0,
     }
-    throw new Error('No data available for incentive slip')
+    return await generateIncentiveSlipPDF(slipData)
   } else {
     return await generateSummaryReportPDF(options.data, options.period)
   }

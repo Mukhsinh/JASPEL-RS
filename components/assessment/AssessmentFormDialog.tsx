@@ -159,7 +159,8 @@ export default function AssessmentFormDialog({
         realization_value: realizationValue,
         achievement_percentage: achievementPercentage,
         score: score,
-        notes: prev[indicatorId]?.notes || ''
+        notes: prev[indicatorId]?.notes || '',
+        sub_assessments: prev[indicatorId]?.sub_assessments || []
       }
     }))
   }
@@ -184,9 +185,10 @@ export default function AssessmentFormDialog({
         subAssessments.push({ sub_indicator_id: subIndicatorId, realization_value: realizationValue, score })
       }
 
-      // Find the indicator to get sub-indicator weights
+      // Find the indicator to get sub-indicator weights and target
       const indicator = categories.flatMap(c => c.indicators).find(i => i.id === indicatorId)
       let totalAchievement = 0
+      let derivedRealizationValue = 0
 
       if (indicator && indicator.sub_indicators.length > 0) {
         // Calculate weighted average of sub-indicator scores
@@ -195,14 +197,18 @@ export default function AssessmentFormDialog({
           const weight = subConfig ? subConfig.weight_percentage : 0
           return sum + (sub.score * weight) / 100
         }, 0)
+        // Derive realization_value that produces totalAchievement
+        derivedRealizationValue = Math.round((totalAchievement / 100) * indicator.target_value * 100) / 100
       } else {
         totalAchievement = current.achievement_percentage
+        derivedRealizationValue = current.realization_value
       }
 
       return {
         ...prev,
         [indicatorId]: {
           ...current,
+          realization_value: derivedRealizationValue,
           sub_assessments: subAssessments,
           achievement_percentage: totalAchievement,
           score: calculateScore(totalAchievement)

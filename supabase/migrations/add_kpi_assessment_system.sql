@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS t_kpi_assessments (
   ) STORED,
   score DECIMAL(10,2) GENERATED ALWAYS AS (
     CASE 
-      WHEN target_value > 0 AND (realization_value / target_value * 100) >= 100 THEN 100
-      WHEN target_value > 0 THEN ROUND((realization_value / target_value * 100)::numeric, 2)
+      WHEN target_value > 0 AND (realization_value / target_value * 100) >= 100 THEN weight_percentage
+      WHEN target_value > 0 THEN ROUND((realization_value / target_value * weight_percentage / 100)::numeric, 2)
       ELSE 0 
     END
   ) STORED,

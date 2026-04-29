@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { FileText, Download, TrendingUp, Building2, Receipt, FileSpreadsheet, FileDown } from 'lucide-react'
+import { FileText, Download, TrendingUp, Building2, IdCard, FileSpreadsheet, FileDown } from 'lucide-react'
 
 type ReportType = 'incentive' | 'kpi-achievement' | 'unit-comparison' | 'employee-slip'
 
@@ -59,7 +59,7 @@ export default function ReportsPage() {
       id: 'employee-slip' as ReportType,
       title: 'Slip Pegawai',
       description: 'Slip insentif pegawai individual',
-      icon: Receipt,
+      icon: IdCard,
       color: 'text-orange-600',
     },
   ]
@@ -154,11 +154,10 @@ export default function ReportsPage() {
           return (
             <Card
               key={report.id}
-              className={`p-4 cursor-pointer transition-all hover:shadow-lg ${
-                selectedReport === report.id
-                  ? 'ring-2 ring-blue-500 bg-blue-50'
-                  : 'hover:bg-gray-50'
-              }`}
+              className={`p-4 cursor-pointer transition-all hover:shadow-lg ${selectedReport === report.id
+                ? 'ring-2 ring-blue-500 bg-blue-50'
+                : 'hover:bg-gray-50'
+                }`}
               onClick={() => setSelectedReport(report.id)}
             >
               <div className="flex items-start space-x-3">
@@ -203,7 +202,7 @@ export default function ReportsPage() {
                   <Download className="w-4 h-4 mr-2" />
                   Unduh Laporan
                 </Button>
-                
+
                 {showDownloadMenu && (
                   <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[200px]">
                     <button
@@ -246,29 +245,40 @@ export default function ReportsPage() {
         <Card className="p-6">
           <h2 className="text-xl font-semibold mb-4">Pratinjau Laporan</h2>
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
+            <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-gray-100">
-                  {Object.keys(reportData[0] || {}).map((key) => (
-                    <th key={key} className="border p-2 text-left font-semibold">
-                      {key.replace(/_/g, ' ').toUpperCase()}
-                    </th>
-                  ))}
+                  <th className="border p-2 text-left font-semibold">NIP/NIK</th>
+                  <th className="border p-2 text-left font-semibold">NAMA PEGAWAI</th>
+                  <th className="border p-2 text-left font-semibold">UNIT</th>
+                  <th className="border p-2 text-right font-semibold">P1</th>
+                  <th className="border p-2 text-right font-semibold">P2</th>
+                  <th className="border p-2 text-right font-semibold">P3</th>
+                  <th className="border p-2 text-right font-semibold">TOTAL SKOR</th>
+                  <th className="border p-2 text-right font-semibold">GROSS INSENTIF</th>
+                  <th className="border p-2 text-right font-semibold">PAJAK</th>
+                  <th className="border p-2 text-right font-semibold">NET INSENTIF</th>
                 </tr>
               </thead>
               <tbody>
                 {reportData.map((row: any, idx: number) => (
                   <tr key={idx} className="hover:bg-gray-50">
-                    {Object.values(row).map((value: any, cellIdx: number) => (
-                      <td key={cellIdx} className="border p-2">
-                        {typeof value === 'number'
-                          ? value.toLocaleString('id-ID', {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })
-                          : value}
-                      </td>
-                    ))}
+                    <td className="border p-2">{row.employee_code || '-'}</td>
+                    <td className="border p-2 font-medium">{row.employee_name}</td>
+                    <td className="border p-2">{row.unit}</td>
+                    <td className="border p-2 text-right">{row.p1_score}</td>
+                    <td className="border p-2 text-right">{row.p2_score}</td>
+                    <td className="border p-2 text-right">{row.p3_score}</td>
+                    <td className="border p-2 text-right font-bold text-blue-700">{row.total_score}</td>
+                    <td className="border p-2 text-right font-medium">
+                      {(parseFloat(row.gross_incentive) || 0).toLocaleString('id-ID', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="border p-2 text-right text-red-600">
+                      {(parseFloat(row.tax_amount) || 0).toLocaleString('id-ID', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="border p-2 text-right font-bold text-green-700">
+                      {(parseFloat(row.net_incentive) || 0).toLocaleString('id-ID', { minimumFractionDigits: 2 })}
+                    </td>
                   </tr>
                 ))}
               </tbody>

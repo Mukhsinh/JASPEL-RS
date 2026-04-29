@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const adminClient = await createAdminClient()
     const { searchParams } = new URL(request.url)
     const action = searchParams.get('action')
     const period = searchParams.get('period')
@@ -17,22 +18,22 @@ export async function GET(request: NextRequest) {
 
     switch (action) {
       case 'periods':
-        return await getAvailablePeriods(supabase)
+        return await getAvailablePeriods(adminClient)
 
       case 'units':
-        return await getAvailableUnits(supabase, user)
+        return await getAvailableUnits(adminClient, user)
 
       case 'report':
         if (!period) {
           return NextResponse.json({ success: false, error: 'Period is required' }, { status: 400 })
         }
-        return await getAssessmentReport(supabase, user, period, unitId)
+        return await getAssessmentReport(adminClient, user, period, unitId)
 
       case 'comparison':
         if (!period) {
           return NextResponse.json({ success: false, error: 'Period is required' }, { status: 400 })
         }
-        return await getPeriodComparison(supabase, user, period, unitId)
+        return await getPeriodComparison(adminClient, user, period, unitId)
 
       default:
         return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 })

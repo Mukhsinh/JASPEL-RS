@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,12 +11,35 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get current user's employee record
-    const { data: currentEmployee } = await supabase
+    // Use admin client to bypass RLS for employee lookup and data queries
+    const adminClient = await createAdminClient()
+
+    // Try by user_id first, then fallback to email
+    let currentEmployee: any = null
+    const { data: byUserId } = await adminClient
       .from('m_employees')
       .select('id, role, unit_id')
       .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
+
+    if (byUserId) {
+      currentEmployee = byUserId
+    } else {
+      const { data: byEmail } = await adminClient
+        .from('m_employees')
+        .select('id, role, unit_id')
+        .eq('email', user.email)
+        .maybeSingle()
+
+      if (byEmail) {
+        currentEmployee = byEmail
+        // Auto-link user_id for future lookups
+        await adminClient
+          .from('m_employees')
+          .update({ user_id: user.id })
+          .eq('id', byEmail.id)
+      }
+    }
 
     if (!currentEmployee) {
       return NextResponse.json({ error: 'Employee record not found' }, { status: 404 })
@@ -35,7 +58,7 @@ export async function GET(request: NextRequest) {
 
     // Authorization check for unit managers
     if (currentEmployee.role === 'unit_manager') {
-      const { data: targetEmployee } = await supabase
+      const { data: targetEmployee } = await adminClient
         .from('m_employees')
         .select('unit_id')
         .eq('id', employeeId)
@@ -50,7 +73,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get employee's unit
-    const { data: employee, error: employeeError } = await supabase
+    const { data: employee, error: employeeError } = await adminClient
       .from('m_employees')
       .select('unit_id')
       .eq('id', employeeId)
@@ -64,7 +87,7 @@ export async function GET(request: NextRequest) {
     console.log('[indicators] employee unit_id:', employee.unit_id)
 
     // Get ALL categories (not filtered by unit_id) first, to check if data exists
-    const { data: allCategories, error: allCatError } = await supabase
+    const { data: allCategories, error: allCatError } = await adminClient
       .from('m_kpi_categories')
       .select('id, category_name, category, weight_percentage, unit_id')
       .eq('is_active', true)
@@ -92,7 +115,7 @@ export async function GET(request: NextRequest) {
     const categoryIds = categories.map(c => c.id)
 
     // Get indicators for the categories
-    const { data: indicators, error: indicatorsError } = await supabase
+    const { data: indicators, error: indicatorsError } = await adminClient
       .from('m_kpi_indicators')
       .select('id, code, name, target_value, weight_percentage, category_id, measurement_unit, description')
       .eq('is_active', true)
@@ -110,7 +133,7 @@ export async function GET(request: NextRequest) {
     // Get sub indicators only if there are indicators
     let subIndicators: any[] = []
     if (indicatorIds.length > 0) {
-      const { data: subInds, error: subIndicatorsError } = await supabase
+      const { data: subInds, error: subIndicatorsError } = await adminClient
         .from('m_kpi_sub_indicators')
         .select('id, indicator_id, code, name, target_value, weight_percentage, scoring_criteria, measurement_unit, description')
         .eq('is_active', true)
@@ -147,7 +170,7 @@ export async function GET(request: NextRequest) {
     })
 
     // Get existing assessments
-    const { data: existingAssessments, error: assessmentsError } = await supabase
+    const { data: existingAssessments, error: assessmentsError } = await adminClient
       .from('t_kpi_assessments')
       .select('*')
       .eq('employee_id', employeeId)

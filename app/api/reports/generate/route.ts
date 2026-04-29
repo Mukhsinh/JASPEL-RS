@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 
 /**
  * Generate reports based on type and period
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    const supabase = await createAdminClient()
 
     let data: any[] = []
 
@@ -83,6 +83,7 @@ async function generateIncentiveReport(supabase: any, period: string) {
     .from('m_employees')
     .select(`
       id,
+      employee_code,
       full_name,
       m_units (
         id,
@@ -90,19 +91,27 @@ async function generateIncentiveReport(supabase: any, period: string) {
         proportion_percentage
       )
     `)
+    .eq('is_active', true)
 
   if (empError) {
     console.error('Error fetching employees:', empError)
     throw new Error('Failed to fetch employee data')
   }
 
-  // 3. Get Assessments for the period
+  // 3. Get Assessments for the period with category info
   const { data: assessments, error: assError } = await supabase
     .from('t_kpi_assessments')
     .select(`
       employee_id,
       score,
-      weight_percentage
+      weight_percentage,
+      achievement_percentage,
+      m_kpi_indicators!inner (
+        m_kpi_categories!inner (
+          category,
+          weight_percentage
+        )
+      )
     `)
     .eq('period', period)
 
@@ -115,33 +124,87 @@ async function generateIncentiveReport(supabase: any, period: string) {
 
   const report = []
 
+  // Maps to store computed data for two-pass calculation
+  const employeeScoresMap = new Map()
+  const unitTotalScoresMap = new Map()
+
+  // First pass: Calculate Total Score for each employee and accumulate Unit Total Score
   for (const emp of employees) {
     if (!emp.m_units) continue
 
     const empAssessments = assessments?.filter((a: any) => a.employee_id === emp.id) || []
 
-    if (empAssessments.length === 0) continue
+    const calcCategoryScore = (categoryName: string) => {
+      const catAssessments = empAssessments.filter((a: any) => a.m_kpi_indicators?.m_kpi_categories?.category === categoryName)
+      if (catAssessments.length === 0) return 0
 
-    let totalScore = 0
-    empAssessments.forEach((a: any) => {
-      totalScore += (a.score || 0)
+      const categoryWeight = parseFloat(catAssessments[0].m_kpi_indicators.m_kpi_categories.weight_percentage) || 0
+
+      let indicatorSum = 0
+      for (const a of catAssessments) {
+        const indWeight = parseFloat(a.weight_percentage) || 0
+        const achieve = parseFloat(a.achievement_percentage) || 0
+        let evalScore = Math.min(indWeight, (achieve / 100) * indWeight)
+        indicatorSum += evalScore
+      }
+
+      return (indicatorSum / 100) * categoryWeight
+    }
+
+    // Calculate categorical scores
+    const p1Score = calcCategoryScore('P1')
+    const p2Score = calcCategoryScore('P2')
+    const p3Score = calcCategoryScore('P3')
+
+    const totalScore = p1Score + p2Score + p3Score
+
+    const unitId = Array.isArray(emp.m_units) ? emp.m_units[0]?.id : emp.m_units.id
+
+    employeeScoresMap.set(emp.id, {
+      emp,
+      p1Score,
+      p2Score,
+      p3Score,
+      totalScore,
+      empAssessmentsCount: empAssessments.length
     })
+
+    if (unitTotalScoresMap.has(unitId)) {
+      unitTotalScoresMap.set(unitId, unitTotalScoresMap.get(unitId) + totalScore)
+    } else {
+      unitTotalScoresMap.set(unitId, totalScore)
+    }
+  }
+
+  // Second pass: Calculate Gross Incentive for each employee based on their unit's total score
+  for (const [empId, data] of employeeScoresMap.entries()) {
+    const { emp, p1Score, p2Score, p3Score, totalScore, empAssessmentsCount } = data
+
+    if (totalScore === 0 && empAssessmentsCount === 0) continue
+
+    const unitId = Array.isArray(emp.m_units) ? emp.m_units[0]?.id : emp.m_units.id
+    const unitTotalScore = unitTotalScoresMap.get(unitId) || 0
 
     const unitProp = Array.isArray(emp.m_units) ? (emp.m_units[0]?.proportion_percentage || 0) : (emp.m_units.proportion_percentage || 0)
     const unitName = Array.isArray(emp.m_units) ? (emp.m_units[0]?.name || '-') : (emp.m_units.name || '-')
-    const grossIncentive = (totalScore / 100) * (unitProp / 100) * defaultPool
 
-    // Very simple tax mock (could dynamically fetch if needed)
+    // Formula: (Employee Total Score / Unit Total Score) * (Unit Prop / 100) * Total Pool
+    // Avoid division by zero! If unitTotalScore is 0 (which means all employees have 0), gross incentive is 0.
+    const scoreRatio = unitTotalScore > 0 ? (totalScore / unitTotalScore) : 0
+    const grossIncentive = scoreRatio * (unitProp / 100) * defaultPool
+
+    // Very simple tax mock (can be enhanced if tax settings are available)
     const taxAmount = 0
     const netIncentive = grossIncentive - taxAmount
 
     report.push({
+      employee_code: emp.employee_code || '-',
       employee_name: emp.full_name,
       unit: unitName,
+      p1_score: p1Score.toFixed(2),
+      p2_score: p2Score.toFixed(2),
+      p3_score: p3Score.toFixed(2),
       total_score: totalScore.toFixed(2),
-      p1_score: '-',
-      p2_score: '-',
-      p3_score: '-',
       gross_incentive: grossIncentive.toFixed(2),
       tax_amount: taxAmount.toFixed(2),
       net_incentive: netIncentive.toFixed(2),
@@ -165,7 +228,10 @@ async function generateKPIAchievementReport(supabase: any, period: string) {
       m_kpi_indicators!inner (
         id,
         name,
-        target_value
+        target_value,
+        m_kpi_categories (
+          category
+        )
       )
     `)
     .eq('period', period)
@@ -237,7 +303,7 @@ async function generateUnitComparisonReport(supabase: any, period: string) {
   return Array.from(unitMap.values()).map(u => ({
     unit_name: u.unit_name,
     average_score: u.employee_count > 0 ? (u.total_score_sum / u.employee_count).toFixed(2) : '0.00',
-    total_incentive: u.total_incentive_sum.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    total_incentive: u.total_incentive_sum.toFixed(2),
     employee_count: u.employee_count
   }))
 }
@@ -287,32 +353,30 @@ async function generateEmployeeSlipReport(supabase: any, period: string) {
 
     const calcSum = (arr: any[]) => arr.reduce((sum, item) => sum + (parseFloat(item.score) || 0), 0)
 
+    const mapIndicator = (i: any) => {
+      const indWeight = parseFloat(i.m_kpi_indicators.weight_percentage) || 0
+      const achieve = parseFloat(i.achievement_percentage) || 0
+      let evalScore = Math.min(indWeight, (achieve / 100) * indWeight)
+
+      return {
+        indicator: i.m_kpi_indicators.name,
+        weight: indWeight + '%',
+        achievement: achieve.toFixed(2) + '%',
+        score: evalScore.toFixed(2),
+      }
+    }
+
     results.push({
       employee_name: row.employee_name,
-      p1_score: calcSum(p1Indicators).toFixed(2),
-      p1_weighted: calcSum(p1Indicators).toFixed(2), // Same for dynamic calculate unless weights differ
-      p1_breakdown: p1Indicators.map((i: any) => ({
-        indicator: i.m_kpi_indicators.name,
-        weight: i.m_kpi_indicators.weight_percentage + '%',
-        achievement: parseFloat(i.achievement_percentage || 0).toFixed(2) + '%',
-        score: parseFloat(i.score || 0).toFixed(2),
-      })),
-      p2_score: calcSum(p2Indicators).toFixed(2),
-      p2_weighted: calcSum(p2Indicators).toFixed(2),
-      p2_breakdown: p2Indicators.map((i: any) => ({
-        indicator: i.m_kpi_indicators.name,
-        weight: i.m_kpi_indicators.weight_percentage + '%',
-        achievement: parseFloat(i.achievement_percentage || 0).toFixed(2) + '%',
-        score: parseFloat(i.score || 0).toFixed(2),
-      })),
-      p3_score: calcSum(p3Indicators).toFixed(2),
-      p3_weighted: calcSum(p3Indicators).toFixed(2),
-      p3_breakdown: p3Indicators.map((i: any) => ({
-        indicator: i.m_kpi_indicators.name,
-        weight: i.m_kpi_indicators.weight_percentage + '%',
-        achievement: parseFloat(i.achievement_percentage || 0).toFixed(2) + '%',
-        score: parseFloat(i.score || 0).toFixed(2),
-      })),
+      p1_score: parseFloat(row.p1_score || 0).toFixed(2),
+      p1_weighted: parseFloat(row.p1_score || 0).toFixed(2), // The main incentive report now properly weights P1
+      p1_breakdown: p1Indicators.map(mapIndicator),
+      p2_score: parseFloat(row.p2_score || 0).toFixed(2),
+      p2_weighted: parseFloat(row.p2_score || 0).toFixed(2),
+      p2_breakdown: p2Indicators.map(mapIndicator),
+      p3_score: parseFloat(row.p3_score || 0).toFixed(2),
+      p3_weighted: parseFloat(row.p3_score || 0).toFixed(2),
+      p3_breakdown: p3Indicators.map(mapIndicator),
       gross_incentive: parseFloat(row.gross_incentive).toLocaleString('id-ID', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,

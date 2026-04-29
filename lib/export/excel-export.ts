@@ -32,13 +32,15 @@ export async function exportToExcel(options: ReportExportOptions): Promise<Buffe
     case 'incentive':
       sheetName = 'Incentive Report'
       wsData = [
-        ['Employee Name', 'Unit', 'P1 Score', 'P2 Score', 'P3 Score', 'Gross Incentive', 'Tax Amount', 'Net Incentive'],
+        ['NIP/NIK', 'Employee Name', 'Unit', 'P1 Score', 'P2 Score', 'P3 Score', 'Total Score', 'Gross Incentive', 'Tax Amount', 'Net Incentive'],
         ...data.map((row: any) => [
+          row.employee_code || '-',
           row.employee_name,
           row.unit,
           row.p1_score,
           row.p2_score,
           row.p3_score,
+          row.total_score,
           row.gross_incentive,
           row.tax_amount,
           row.net_incentive,
@@ -74,14 +76,16 @@ export async function exportToExcel(options: ReportExportOptions): Promise<Buffe
 
     case 'employee-slip':
       sheetName = 'Employee Slip'
-      // For employee slip, create multiple sheets or detailed breakdown
       wsData = [
-        ['Employee Name', 'P1 Score', 'P2 Score', 'P3 Score', 'Gross Incentive', 'Tax Amount', 'Net Incentive'],
+        ['NIP/NIK', 'Employee Name', 'Unit', 'P1 Score', 'P2 Score', 'P3 Score', 'Total Score', 'Gross Incentive', 'Tax Amount', 'Net Incentive'],
         ...data.map((row: any) => [
+          row.employee_code || '-',
           row.employee_name,
+          row.unit,
           row.p1_score,
           row.p2_score,
           row.p3_score,
+          row.total_score,
           row.gross_incentive,
           row.tax_amount,
           row.net_incentive,

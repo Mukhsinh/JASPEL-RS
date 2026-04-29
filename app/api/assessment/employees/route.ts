@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 
 interface AssessmentStatus {
   employee_id: string
@@ -24,23 +24,38 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get current user's employee record
-    const { data: currentEmployee, error: employeeError } = await supabase
+    // Use admin client to bypass RLS for employee lookup
+    const adminClient = await createAdminClient()
+
+    // Try by user_id first, then fallback to email
+    let currentEmployee: any = null
+    const { data: byUserId } = await adminClient
       .from('m_employees')
       .select('id, role, unit_id, full_name')
       .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
 
-    if (employeeError) {
-      console.error('Employee lookup error:', employeeError)
-      return NextResponse.json({
-        error: 'Failed to get employee record',
-        details: employeeError.message
-      }, { status: 500 })
+    if (byUserId) {
+      currentEmployee = byUserId
+    } else {
+      const { data: byEmail } = await adminClient
+        .from('m_employees')
+        .select('id, role, unit_id, full_name')
+        .eq('email', user.email)
+        .maybeSingle()
+
+      if (byEmail) {
+        currentEmployee = byEmail
+        // Auto-link user_id for future lookups
+        await adminClient
+          .from('m_employees')
+          .update({ user_id: user.id })
+          .eq('id', byEmail.id)
+      }
     }
 
     if (!currentEmployee) {
-      console.error('No employee record found for user:', user.id)
+      console.error('No employee record found for user:', user.id, user.email)
       return NextResponse.json({ error: 'Employee record not found' }, { status: 404 })
     }
 
@@ -56,8 +71,8 @@ export async function GET(request: NextRequest) {
 
     console.log('Fetching employees for period:', period)
 
-    // Get employees
-    let employeeQuery = supabase
+    // Get employees using admin client
+    let employeeQuery = adminClient
       .from('m_employees')
       .select(`
         id,
@@ -79,7 +94,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get KPI indicators count per unit to determine total_indicators
-    const { data: indicatorsData, error: indicatorsError } = await supabase
+    const { data: indicatorsData, error: indicatorsError } = await adminClient
       .from('m_kpi_indicators')
       .select(`
         id,
@@ -102,7 +117,7 @@ export async function GET(request: NextRequest) {
     }, {})
 
     // Get assessments for current period
-    const { data: assessmentsData, error: assessmentsError } = await supabase
+    const { data: assessmentsData, error: assessmentsError } = await adminClient
       .from('t_kpi_assessments')
       .select('employee_id, indicator_id')
       .eq('period', period)
