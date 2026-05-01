@@ -27,8 +27,9 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-// Types
-interface User {
+// ── Types ────────────────────────────────────────────────────────────────────
+
+interface UserProfile {
   id: string
   email: string
   role: 'superadmin' | 'unit_manager' | 'employee'
@@ -40,450 +41,349 @@ interface MenuItem {
   id: string
   label: string
   path: string
-  icon?: string
+  icon: string
 }
 
-const iconMap: Record<string, any> = {
-  LayoutDashboard: LayoutDashboard || User,
-  Users: Users || User,
-  UserCheck: UserCheck || User,
-  Building2: Building2 || User,
-  Target: Target || User,
-  Wallet: Wallet || User,
-  FileText: FileText || User,
-  BarChart3: BarChart3 || User,
-  Settings: Settings || User,
-  Shield: Shield || User,
-  User: User,
-  Bell: Bell || User,
-  ClipboardCheck: ClipboardCheck || User,
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const iconMap: Record<string, React.ElementType> = {
+  LayoutDashboard,
+  Users,
+  UserCheck,
+  Building2,
+  Target,
+  Wallet,
+  FileText,
+  BarChart3,
+  Settings,
+  Shield,
+  User,
+  Bell,
+  ClipboardCheck,
 }
 
-// Simple auth hook
+const ALL_MENU_ITEMS: MenuItem[] = [
+  { id: 'dashboard', label: 'Dashboard', path: '/dashboard', icon: 'LayoutDashboard' },
+  { id: 'users', label: 'Manajemen Pengguna', path: '/users', icon: 'Users' },
+  { id: 'pegawai', label: 'Data Pegawai', path: '/pegawai', icon: 'UserCheck' },
+  { id: 'units', label: 'Unit Kerja', path: '/units', icon: 'Building2' },
+  { id: 'kpi-config', label: 'Konfigurasi KPI', path: '/kpi-config', icon: 'Target' },
+  { id: 'pool', label: 'Pool Insentif', path: '/pool', icon: 'Wallet' },
+  { id: 'assessment', label: 'Penilaian KPI', path: '/assessment', icon: 'ClipboardCheck' },
+  { id: 'reports', label: 'Laporan', path: '/reports', icon: 'FileText' },
+  { id: 'settings', label: 'Pengaturan', path: '/settings', icon: 'Settings' },
+  { id: 'notifications', label: 'Notifikasi', path: '/notifications', icon: 'Bell' },
+]
+
+function getMenuItems(role: string): MenuItem[] {
+  if (role === 'superadmin') return ALL_MENU_ITEMS
+  if (role === 'unit_manager') {
+    return ALL_MENU_ITEMS.filter(i =>
+      ['dashboard', 'assessment', 'reports', 'notifications'].includes(i.id)
+    )
+  }
+  return ALL_MENU_ITEMS.filter(i => ['dashboard', 'notifications'].includes(i.id))
+}
+
+// ── Auth Hook ────────────────────────────────────────────────────────────────
+
 function useAuth() {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const loadUser = async () => {
+    ; (async () => {
       try {
         const supabase = createClient()
         const { data: { session } } = await supabase.auth.getSession()
-
         if (session?.user) {
-          // Get user role from metadata
           const role = session.user.user_metadata?.role || 'employee'
-
-          // Try to get employee data
-          const { data: employeeData } = await supabase
+          const { data: emp } = await supabase
             .from('m_employees')
             .select('full_name, unit_id')
             .eq('user_id', session.user.id)
             .maybeSingle()
-
           setUser({
             id: session.user.id,
             email: session.user.email || '',
             role,
-            full_name: employeeData?.full_name || session.user.user_metadata?.full_name,
-            unit_id: employeeData?.unit_id,
+            full_name: emp?.full_name || session.user.user_metadata?.full_name,
+            unit_id: emp?.unit_id,
           })
         }
-      } catch (error) {
-        console.error('Error loading user:', error)
+      } catch (e) {
+        console.error('Sidebar auth error:', e)
       } finally {
         setLoading(false)
       }
-    }
-
-    loadUser()
+    })()
   }, [])
 
   return { user, loading }
 }
 
-// Simple menu items function
-function getMenuItems(role: string): MenuItem[] {
-  const allMenuItems: MenuItem[] = [
-    {
-      id: 'dashboard',
-      label: 'Dashboard',
-      path: '/dashboard',
-      icon: 'LayoutDashboard'
-    },
-    {
-      id: 'users',
-      label: 'Manajemen Pengguna',
-      path: '/users',
-      icon: 'Users'
-    },
-    {
-      id: 'pegawai',
-      label: 'Data Pegawai',
-      path: '/pegawai',
-      icon: 'UserCheck'
-    },
-    {
-      id: 'units',
-      label: 'Unit Kerja',
-      path: '/units',
-      icon: 'Building2'
-    },
-    {
-      id: 'kpi-config',
-      label: 'Konfigurasi KPI',
-      path: '/kpi-config',
-      icon: 'Target'
-    },
-    {
-      id: 'pool',
-      label: 'Pool Insentif',
-      path: '/pool',
-      icon: 'Wallet'
-    },
-    {
-      id: 'assessment',
-      label: 'Penilaian KPI',
-      path: '/assessment',
-      icon: 'ClipboardCheck'
-    },
-    {
-      id: 'reports',
-      label: 'Laporan',
-      path: '/reports',
-      icon: 'FileText'
-    },
-    {
-      id: 'settings',
-      label: 'Pengaturan',
-      path: '/settings',
-      icon: 'Settings'
-    },
-    {
-      id: 'notifications',
-      label: 'Notifikasi',
-      path: '/notifications',
-      icon: 'Bell'
-    }
-  ]
-
-  // Filter based on role
-  if (role === 'superadmin') {
-    return allMenuItems
-  } else if (role === 'unit_manager') {
-    return allMenuItems.filter(item =>
-      ['dashboard', 'assessment', 'reports', 'notifications'].includes(item.id)
-    )
-  } else {
-    return allMenuItems.filter(item =>
-      ['dashboard', 'notifications'].includes(item.id)
-    )
-  }
-}
+// ── Sidebar Component ─────────────────────────────────────────────────────────
 
 export default function Sidebar() {
-  const [isCollapsed, setIsCollapsed] = useState(false)
-  const [isMobileOpen, setIsMobileOpen] = useState(false)
-
-  useEffect(() => {
-    const saved = localStorage.getItem('sidebar-collapsed')
-    if (saved) {
-      setIsCollapsed(JSON.parse(saved))
-    }
-  }, [])
-  const [showLogoutDialog, setShowLogoutDialog] = useState(false)
-  const [unreadCount, setUnreadCount] = useState(0)
-  const [unitName, setUnitName] = useState('')
-  const [companyInfo, setCompanyInfo] = useState<any>(null)
-
   const pathname = usePathname()
   const { user, loading } = useAuth()
-  const menuItems = user ? getMenuItems(user.role) : []
 
-  // Load sidebar data
-  const loadSidebarData = useCallback(async () => {
-    if (!user) return
+  const [isCollapsed, setIsCollapsed] = useState(false)
+  const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const [companyInfo, setCompanyInfo] = useState<any>(null)
+  const [unitName, setUnitName] = useState('')
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
+  // Persist collapsed state
+  useEffect(() => {
+    setMounted(true)
     try {
-      const supabase = createClient()
-
-      // Get company info
-      const { data: settingsData } = await supabase
-        .from('t_settings')
-        .select('value')
-        .eq('key', 'company_info')
-        .maybeSingle()
-
-      if (settingsData) {
-        setCompanyInfo(settingsData.value || null)
-      }
-
-      // Get unit name if user is not superadmin
-      if (user.role !== 'superadmin' && user.unit_id) {
-        const { data: unitData } = await supabase
-          .from('m_units')
-          .select('name')
-          .eq('id', user.unit_id)
-          .single()
-
-        if (unitData) {
-          setUnitName(unitData.name || '')
-        }
-      }
-
-      // Get notifications count
-      const { count } = await supabase
-        .from('t_notification')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('read', false)
-
-      setUnreadCount(count || 0)
-    } catch (error) {
-      console.error('Error loading sidebar data:', error)
-      setCompanyInfo({ name: 'JASPEL KPI', logo: null })
-    }
-  }, [user])
+      const saved = localStorage.getItem('sidebar-collapsed')
+      if (saved) setIsCollapsed(JSON.parse(saved))
+    } catch { }
+  }, [])
 
   useEffect(() => {
-    if (user && !loading) {
-      loadSidebarData()
+    if (mounted) {
+      try { localStorage.setItem('sidebar-collapsed', JSON.stringify(isCollapsed)) } catch { }
     }
-  }, [user, loading, loadSidebarData])
+  }, [isCollapsed, mounted])
+
+  // Load sidebar data once user is ready
+  useEffect(() => {
+    if (!user) return
+      ; (async () => {
+        try {
+          const supabase = createClient()
+
+          const { data: s } = await supabase
+            .from('t_settings').select('value').eq('key', 'company_info').maybeSingle()
+          if (s) setCompanyInfo(s.value)
+
+          if (user.role !== 'superadmin' && user.unit_id) {
+            const { data: u } = await supabase
+              .from('m_units').select('name').eq('id', user.unit_id).single()
+            if (u) setUnitName(u.name || '')
+          }
+
+          const { count } = await supabase
+            .from('t_notification')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('read', false)
+          setUnreadCount(count || 0)
+        } catch (e) {
+          console.error('Sidebar load error:', e)
+        }
+      })()
+  }, [user])
 
   const handleLogout = useCallback(async () => {
     try {
-      setShowLogoutDialog(false)
       const supabase = createClient()
       await supabase.auth.signOut()
       window.location.href = '/login'
-    } catch (error) {
-      console.error('Logout error:', error)
+    } catch (e) {
+      console.error('Logout error:', e)
     }
   }, [])
 
-  const isActive = useCallback((path: string) => {
-    return pathname === path || pathname.startsWith(path + '/')
-  }, [pathname])
+  const isActive = useCallback(
+    (path: string) => pathname === path || pathname.startsWith(path + '/'),
+    [pathname]
+  )
 
-  const handleNavigation = useCallback(() => {
-    setIsMobileOpen(false)
-  }, [])
+  const menuItems = user ? getMenuItems(user.role) : []
 
-  const [isMounted, setIsMounted] = useState(false)
+  // ── Skeleton (shown while loading or not mounted) ──────────────────────────
+  const SkeletonContent = () => (
+    <div className="flex flex-col h-full">
+      <div className="p-5 bg-gradient-to-r from-blue-600 to-blue-700">
+        <div className="h-8 bg-blue-500/50 rounded animate-pulse" />
+      </div>
+      <div className="p-4 space-y-2">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="h-10 bg-gray-100 rounded-xl animate-pulse" />
+        ))}
+      </div>
+    </div>
+  )
 
-  useEffect(() => {
-    setIsMounted(true)
-  }, [])
-
-  if (!isMounted) {
-    return (
-      <aside className="fixed left-0 top-0 h-screen w-72 bg-white border-r border-gray-200 hidden lg:block z-50">
-        <div className="p-4">
-          <div className="h-8 bg-gray-100 rounded mb-4 animate-pulse"></div>
-          <div className="space-y-2">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-10 bg-gray-50 rounded animate-pulse"></div>
-            ))}
-          </div>
-        </div>
-      </aside>
-    )
-  }
-
-  if (loading) {
-    return (
-      <aside className="fixed left-0 top-0 h-screen w-72 bg-white border-r border-gray-200 hidden lg:block z-50">
-        <div className="p-4 animate-pulse">
-          <div className="h-8 bg-gray-300 rounded mb-4"></div>
-          <div className="space-y-2">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-10 bg-gray-200 rounded"></div>
-            ))}
-          </div>
-        </div>
-      </aside>
-    )
-  }
-
-  return (
-    <React.Fragment>
-      {/* Mobile Menu Button */}
-      <button
-        className="lg:hidden fixed top-4 left-4 p-2.5 bg-blue-600 text-white rounded-lg shadow-lg z-50"
-        onClick={() => setIsMobileOpen(!isMobileOpen)}
-        aria-label="Toggle menu"
-      >
-        {isMobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-      </button>
-
-      {/* Desktop Sidebar */}
-      <aside
-        className={cn(
-          'fixed left-0 top-0 h-screen bg-white border-r border-gray-200 transition-all duration-300 shadow-lg',
-          'hidden lg:block',
-          isCollapsed ? 'w-20' : 'w-72'
-        )}
-        style={{ zIndex: 1000 }}
-      >
-        <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="p-5 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-blue-700">
-            <div className="flex items-center justify-between">
-              {!isCollapsed && (
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-md">
-                    {companyInfo?.logo ? (
-                      <img
-                        src={companyInfo.logo}
-                        alt="Logo"
-                        className="w-full h-full object-contain p-1"
-                      />
-                    ) : (
-                      <span className="text-blue-600 font-bold text-lg">J</span>
-                    )}
-                  </div>
-                  <div>
-                    <h1 className="text-xl font-bold text-white">
-                      {companyInfo?.appName || 'JASPEL'}
-                    </h1>
-                    <p className="text-xs text-blue-100">Sistem Insentif KPI</p>
-                  </div>
-                </div>
-              )}
-              <button
-                onClick={() => setIsCollapsed(!isCollapsed)}
-                className="p-1.5 hover:bg-blue-500 rounded-lg transition-colors text-white"
-                aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              >
-                {isCollapsed ? (
-                  <ChevronRight className="h-4 w-4" />
-                ) : (
-                  <ChevronLeft className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* User Info */}
-          {!isCollapsed && user && (
-            <div className="p-4 border-b border-gray-200 bg-white">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold shadow-md">
-                  {(user.full_name || user.email || 'U').charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm text-gray-900 truncate">
-                    {user.full_name || user.email}
-                  </div>
-                  {unitName && (
-                    <div className="text-xs text-gray-500 truncate">{unitName}</div>
-                  )}
-                  <div className="mt-1">
-                    <span className={cn(
-                      'text-xs px-2 py-0.5 rounded-full font-medium',
-                      user.role === 'superadmin' ? 'bg-purple-100 text-purple-700' :
-                        user.role === 'unit_manager' ? 'bg-blue-100 text-blue-700' :
-                          'bg-green-100 text-green-700'
-                    )}>
-                      {user.role === 'superadmin' ? 'Superadmin' :
-                        user.role === 'unit_manager' ? 'Manager Unit' : 'Pegawai'}
-                    </span>
-                  </div>
-                </div>
+  // ── Sidebar inner content ──────────────────────────────────────────────────
+  const SidebarInner = () => (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="p-5 border-b border-blue-700 bg-gradient-to-r from-blue-600 to-blue-700 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          {!isCollapsed && (
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center shadow-md flex-shrink-0">
+                {companyInfo?.logo
+                  ? <img src={companyInfo.logo} alt="Logo" className="w-full h-full object-contain p-1" />
+                  : <span className="text-blue-600 font-black text-base">P</span>
+                }
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-base font-black text-white truncate leading-tight">
+                  {companyInfo?.appName || 'PINTAR-JP'}
+                </h1>
+                <p className="text-xs text-blue-100 truncate">Sistem Insentif KPI</p>
               </div>
             </div>
           )}
-
-          {/* Navigation Menu */}
-          <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-            {menuItems.map((item) => {
-              const Icon = iconMap[item.icon || 'LayoutDashboard']
-              const active = isActive(item.path)
-              const isNotifications = item.id === 'notifications'
-
-              return (
-                <div key={item.id} className="relative group">
-                  <Link
-                    href={item.path}
-                    className={cn(
-                      'w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all duration-200',
-                      'hover:bg-gray-50',
-                      active && 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md',
-                      !active && 'text-gray-700 hover:text-blue-600',
-                      isCollapsed && 'justify-center px-2'
-                    )}
-                    onClick={handleNavigation}
-                    aria-label={item.label}
-                  >
-                    {Icon ? <Icon className="h-5 w-5 flex-shrink-0" /> : <div className="h-5 w-5 flex-shrink-0 bg-red-500 rounded-full" title={`Missing icon: ${item.icon}`} />}
-                    {!isCollapsed && (
-                      <>
-                        <span className="font-medium truncate">{item.label}</span>
-                        {isNotifications && unreadCount > 0 && (
-                          <span className="ml-auto bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                            {unreadCount > 99 ? '99+' : unreadCount}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </Link>
-
-                  {/* Tooltip for collapsed state */}
-                  {isCollapsed && (
-                    <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-sm rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                      {item.label}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </nav>
-
-          {/* Logout Button */}
-          <div className="p-3 border-t border-gray-200">
-            <button
-              onClick={() => setShowLogoutDialog(true)}
-              className={cn(
-                'w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all duration-200',
-                'text-red-600 hover:bg-red-50 hover:text-red-700',
-                isCollapsed && 'justify-center px-2'
-              )}
-            >
-              <LogOut className="h-5 w-5 flex-shrink-0" />
-              {!isCollapsed && <span className="font-medium">Keluar</span>}
-            </button>
-          </div>
+          <button
+            onClick={() => setIsCollapsed(c => !c)}
+            className="p-1.5 hover:bg-blue-500 rounded-lg transition-colors text-white flex-shrink-0 hidden lg:flex"
+            aria-label={isCollapsed ? 'Expand' : 'Collapse'}
+          >
+            {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </button>
+          {/* Mobile close button */}
+          <button
+            onClick={() => setIsMobileOpen(false)}
+            className="p-1.5 hover:bg-blue-500 rounded-lg transition-colors text-white flex-shrink-0 lg:hidden"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
-      </aside>
+      </div>
 
-      {/* Logout Confirmation Dialog */}
-      {showLogoutDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-sm mx-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Konfirmasi Keluar
-            </h3>
-            <p className="text-gray-600 mb-4">
-              Apakah Anda yakin ingin keluar dari sistem?
-            </p>
-            <div className="flex gap-2 justify-end">
-              <Button
-                variant="outline"
-                onClick={() => setShowLogoutDialog(false)}
-              >
-                Batal
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleLogout}
-              >
-                Keluar
-              </Button>
+      {/* User Info */}
+      {!isCollapsed && user && (
+        <div className="px-4 py-3 border-b border-gray-100 bg-white flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-sm shadow flex-shrink-0">
+              {(user.full_name || user.email || 'U').charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-sm text-gray-900 truncate">
+                {user.full_name || user.email}
+              </div>
+              {unitName && <div className="text-xs text-gray-500 truncate">{unitName}</div>}
+              <span className={cn(
+                'text-[10px] px-2 py-0.5 rounded-full font-semibold mt-0.5 inline-block',
+                user.role === 'superadmin' ? 'bg-purple-100 text-purple-700' :
+                  user.role === 'unit_manager' ? 'bg-blue-100 text-blue-700' :
+                    'bg-green-100 text-green-700'
+              )}>
+                {user.role === 'superadmin' ? 'Superadmin' :
+                  user.role === 'unit_manager' ? 'Manager Unit' : 'Pegawai'}
+              </span>
             </div>
           </div>
         </div>
       )}
-    </React.Fragment>
+
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+        {menuItems.map(item => {
+          const Icon = iconMap[item.icon] || User
+          const active = isActive(item.path)
+          const isNotif = item.id === 'notifications'
+
+          return (
+            <Link
+              key={item.id}
+              href={item.path}
+              onClick={() => setIsMobileOpen(false)}
+              className={cn(
+                'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 group',
+                active
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md shadow-blue-500/20'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                isCollapsed && 'justify-center'
+              )}
+            >
+              <div className="relative flex-shrink-0">
+                <Icon className={cn('h-5 w-5', active ? 'text-white' : 'text-gray-500 group-hover:text-blue-600')} />
+                {isNotif && unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </div>
+              {!isCollapsed && (
+                <span className={cn('text-sm font-semibold truncate', active ? 'text-white' : '')}>
+                  {item.label}
+                </span>
+              )}
+            </Link>
+          )
+        })}
+      </nav>
+
+      {/* Logout */}
+      <div className="p-3 border-t border-gray-100 flex-shrink-0">
+        {showLogoutDialog ? (
+          <div className="p-3 bg-red-50 rounded-xl border border-red-100">
+            <p className="text-xs text-gray-700 font-semibold mb-3 text-center">Yakin ingin keluar?</p>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="flex-1 h-8 text-xs" onClick={() => setShowLogoutDialog(false)}>
+                Batal
+              </Button>
+              <Button size="sm" className="flex-1 h-8 text-xs bg-red-500 hover:bg-red-600 text-white" onClick={handleLogout}>
+                Keluar
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowLogoutDialog(true)}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-red-500 hover:bg-red-50 transition-colors',
+              isCollapsed && 'justify-center'
+            )}
+          >
+            <LogOut className="h-5 w-5 flex-shrink-0" />
+            {!isCollapsed && <span className="text-sm font-semibold">Keluar</span>}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <>
+      {/* ── Mobile hamburger button (always visible on mobile) ── */}
+      <button
+        onClick={() => setIsMobileOpen(o => !o)}
+        className="lg:hidden fixed top-3 left-3 z-[60] p-2.5 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/30 active:scale-95 transition-transform"
+        aria-label="Toggle navigation"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      {/* ── Mobile backdrop ── */}
+      {isMobileOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-[55] bg-slate-900/50 backdrop-blur-sm"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
+
+      {/* ── Mobile sidebar (slides in from left) ── */}
+      <aside
+        className={cn(
+          'lg:hidden fixed top-0 left-0 h-screen w-72 bg-white border-r border-gray-200 shadow-xl z-[60] transition-transform duration-300 ease-in-out',
+          isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
+        {!mounted || loading ? <SkeletonContent /> : <SidebarInner />}
+      </aside>
+
+      {/* ── Desktop sidebar (always visible, collapsible) ── */}
+      <aside
+        className={cn(
+          'hidden lg:flex flex-col fixed top-0 left-0 h-screen bg-white border-r border-gray-200 shadow-sm z-[50] transition-all duration-300',
+          isCollapsed ? 'w-20' : 'w-72'
+        )}
+      >
+        {!mounted || loading ? <SkeletonContent /> : <SidebarInner />}
+      </aside>
+    </>
   )
 }

@@ -10,10 +10,10 @@ export default async function AuthenticatedLayout({
   children: React.ReactNode
 }) {
   const supabase = await createClient()
-  
+
   // Verify session exists
   const { data: { session } } = await supabase.auth.getSession()
-  
+
   if (!session) {
     redirect('/login')
   }
@@ -21,7 +21,8 @@ export default async function AuthenticatedLayout({
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto lg:ml-72 flex flex-col">
+      {/* pt-14 on mobile gives space below the fixed hamburger button */}
+      <main className="flex-1 overflow-y-auto lg:ml-72 flex flex-col pt-14 lg:pt-0">
         <div className="flex-1">
           <ErrorBoundary>
             {children}
