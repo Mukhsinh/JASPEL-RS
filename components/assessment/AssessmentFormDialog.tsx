@@ -15,8 +15,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Save, AlertCircle, Target, TrendingUp, Copy } from 'lucide-react'
+import { Save, AlertCircle, Target, TrendingUp, Copy, LayoutDashboard, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
+import { Progress } from '@/components/ui/progress'
 import type { AssessmentStatus } from '@/lib/types/assessment.types'
 import type { ScoringCriterion } from '@/lib/types/kpi.types'
 
@@ -110,6 +112,22 @@ export default function AssessmentFormDialog({
     }
   }
 
+  const getSubIndicatorMaxScore = (sub: KPISubIndicator) => {
+    if (sub.scoring_criteria && sub.scoring_criteria.length > 0) {
+      return Math.max(...sub.scoring_criteria.map(c => c.score))
+    }
+    return sub.target_value > 0 ? sub.target_value : 100
+  }
+
+  const getIndicatorTarget = (indicator: KPIIndicator) => {
+    if (indicator.sub_indicators && indicator.sub_indicators.length > 0) {
+      return indicator.sub_indicators.reduce((sum, sub) => {
+        return sum + (getSubIndicatorMaxScore(sub) * (sub.weight_percentage / 100))
+      }, 0)
+    }
+    return indicator.target_value
+  }
+
   const loadExistingAssessments = async () => {
     setLoading(true)
     try {
@@ -191,14 +209,18 @@ export default function AssessmentFormDialog({
       let derivedRealizationValue = 0
 
       if (indicator && indicator.sub_indicators.length > 0) {
-        // Calculate weighted average of sub-indicator scores
-        totalAchievement = subAssessments.reduce((sum, sub) => {
+        // Bottom-up logic: Sum (Skor * Bobot)
+        let sumRealisasi = 0
+        subAssessments.forEach(sub => {
           const subConfig = indicator.sub_indicators.find(s => s.id === sub.sub_indicator_id)
-          const weight = subConfig ? subConfig.weight_percentage : 0
-          return sum + (sub.score * weight) / 100
-        }, 0)
-        // Derive realization_value that produces totalAchievement
-        derivedRealizationValue = Math.round((totalAchievement / 100) * indicator.target_value * 100) / 100
+          const weight = subConfig ? (subConfig.weight_percentage / 100) : 0
+          sumRealisasi += (sub.score || 0) * weight
+        })
+
+        const maxTarget = getIndicatorTarget(indicator)
+
+        derivedRealizationValue = sumRealisasi
+        totalAchievement = maxTarget > 0 ? (sumRealisasi / maxTarget) * 100 : 0
       } else {
         totalAchievement = current.achievement_percentage
         derivedRealizationValue = current.realization_value
@@ -208,9 +230,9 @@ export default function AssessmentFormDialog({
         ...prev,
         [indicatorId]: {
           ...current,
-          realization_value: derivedRealizationValue,
+          realization_value: Number(derivedRealizationValue.toFixed(4)),
           sub_assessments: subAssessments,
-          achievement_percentage: totalAchievement,
+          achievement_percentage: Number(totalAchievement.toFixed(2)),
           score: calculateScore(totalAchievement)
         }
       }
@@ -255,7 +277,7 @@ export default function AssessmentFormDialog({
               indicator_id: indicator.id,
               period: period,
               realization_value: assessment.realization_value,
-              target_value: indicator.target_value,
+              target_value: getIndicatorTarget(indicator),
               weight_percentage: indicator.weight_percentage,
               achievement_percentage: assessment.achievement_percentage,
               notes: assessment.notes,
@@ -273,6 +295,7 @@ export default function AssessmentFormDialog({
       )
 
       await Promise.all(assessmentPromises)
+      toast.success('Penilaian berhasil disimpan!')
       onSaved()
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to save assessments')
@@ -350,6 +373,81 @@ export default function AssessmentFormDialog({
           </div>
         )}
 
+        {/* Real-time Recapitulation & Progress */}
+        {!loading && categories.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-2">
+            <Card className="bg-blue-50/50 border-blue-100">
+              <CardHeader className="py-3 px-4">
+                <CardTitle className="text-xs font-semibold text-blue-700 uppercase tracking-wider flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Progress Pengisian
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="py-0 px-4 pb-3">
+                {(() => {
+                  const totalInd = categories.flatMap(c => c.indicators).length
+                  const filledInd = Object.keys(assessments).length
+                  const pct = totalInd > 0 ? (filledInd / totalInd) * 100 : 0
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm font-bold">
+                        <span>{filledInd} / {totalInd}</span>
+                        <span>{Math.round(pct)}%</span>
+                      </div>
+                      <Progress value={pct} className="h-2" />
+                    </div>
+                  )
+                })()}
+              </CardContent>
+            </Card>
+
+            {['P1', 'P2', 'P3'].map((catCode) => {
+              const category = categories.find(c => c.category === catCode)
+              if (!category) return null
+
+              let totalRealisasiKategori = 0
+              let totalTargetKategori = 0
+
+              category.indicators.forEach(indicator => {
+                const assessment = assessments[indicator.id]
+                const indWeight = parseFloat(indicator.weight_percentage.toString()) || 0
+
+                // Bottom-up Indicator to Category
+                const indTarget = getIndicatorTarget(indicator)
+                const indRealisasi = assessment ? assessment.realization_value : 0
+
+                totalRealisasiKategori += (indRealisasi * (indWeight / 100))
+                totalTargetKategori += (indTarget * (indWeight / 100))
+              })
+
+              const porsiKategori = category.weight_percentage
+              let kontribusiAkhir = 0
+              if (totalTargetKategori > 0) {
+                kontribusiAkhir = (totalRealisasiKategori / totalTargetKategori) * porsiKategori
+              }
+
+              return (
+                <Card key={catCode} className="border-gray-200">
+                  <CardHeader className="py-3 px-4 flex flex-row items-center justify-between space-y-0">
+                    <CardTitle className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Total {catCode} ({porsiKategori}%)
+                    </CardTitle>
+                    <Badge variant="secondary" className="text-[10px] font-medium px-2 py-0 border-blue-200 bg-blue-50 text-blue-700">
+                      Poin Akhir: {kontribusiAkhir.toFixed(2)}
+                    </Badge>
+                  </CardHeader>
+                  <CardContent className="py-0 px-4 pb-3">
+                    <div className="text-xl font-bold text-gray-900 flex items-end">
+                      {totalRealisasiKategori.toFixed(2)}
+                      <span className="text-sm font-medium text-gray-500 ml-1 mb-0.5">/ {totalTargetKategori.toFixed(2)}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        )}
+
         <div className="space-y-6">
           {loading ? (
             <div className="space-y-4">
@@ -415,7 +513,7 @@ export default function AssessmentFormDialog({
                             <div>
                               <Label className="text-sm font-medium">Target</Label>
                               <div className="mt-1 p-2 bg-gray-50 rounded border text-sm">
-                                {indicator.target_value.toFixed(2)}
+                                {getIndicatorTarget(indicator).toFixed(2)}
                                 {indicator.measurement_unit && ` ${indicator.measurement_unit}`}
                               </div>
                             </div>

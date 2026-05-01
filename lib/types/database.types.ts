@@ -451,6 +451,47 @@ export interface Database {
           created_at?: string
         }
       }
+      t_history_pir: {
+        Row: {
+          id: string
+          period: string
+          unit_id: string
+          unit_name: string | null
+          net_pool_amount: number
+          proportion_percentage: number
+          allocated_for_unit: number
+          total_skor_kolektif: number
+          pir_value: number
+          employee_count: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          period: string
+          unit_id: string
+          unit_name?: string | null
+          net_pool_amount?: number
+          proportion_percentage?: number
+          allocated_for_unit?: number
+          total_skor_kolektif?: number
+          pir_value?: number
+          employee_count?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          period?: string
+          unit_id?: string
+          unit_name?: string | null
+          net_pool_amount?: number
+          proportion_percentage?: number
+          allocated_for_unit?: number
+          total_skor_kolektif?: number
+          pir_value?: number
+          employee_count?: number
+          created_at?: string
+        }
+      }
     }
   }
 }

@@ -163,6 +163,28 @@ export default function AssessmentReports({
     }
   }
 
+  const handleDownloadGuide = async () => {
+    try {
+      const params = new URLSearchParams({
+        ...(selectedUnit !== 'all' && { unit_id: selectedUnit })
+      })
+
+      const response = await fetch(`/api/reports/assessment-guide?${params}`)
+      const blob = await response.blob()
+
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `petunjuk-penilaian-${selectedUnit !== 'all' ? selectedUnit : 'umum'}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error('Error downloading guide:', error)
+    }
+  }
+
   const handleExportReport = async () => {
     if (!selectedPeriod) return
 
@@ -219,10 +241,16 @@ export default function AssessmentReports({
           <h2 className="text-2xl font-bold text-gray-900">Laporan Penilaian KPI</h2>
           <p className="text-gray-600">Analisis dan ringkasan penilaian kinerja pegawai</p>
         </div>
-        <Button onClick={handleExportReport} disabled={!reportData}>
-          <Download className="h-4 w-4 mr-2" />
-          Ekspor Excel
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={handleDownloadGuide}>
+            <Download className="h-4 w-4 mr-2" />
+            Unduh Petunjuk
+          </Button>
+          <Button onClick={handleExportReport} disabled={!reportData}>
+            <Download className="h-4 w-4 mr-2" />
+            Ekspor Excel
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}

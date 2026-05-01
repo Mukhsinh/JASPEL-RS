@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import { getSetting, getCompanyInfo } from '@/lib/services/settings.service'
+import { getSettingServer, getCompanyInfoServer } from '@/lib/services/settings.server.service'
 
 interface ExportData {
   headers: string[]
@@ -30,13 +30,19 @@ export async function exportToExcel(options: ReportExportOptions): Promise<Buffe
 
   switch (reportType) {
     case 'incentive':
-      sheetName = 'Incentive Report'
+    case 'employee-slip':
+      sheetName = reportType === 'incentive' ? 'Incentive Report' : 'Employee Slip'
       wsData = [
-        ['NIP/NIK', 'Employee Name', 'Unit', 'P1 Score', 'P2 Score', 'P3 Score', 'Total Score', 'Gross Incentive', 'Tax Amount', 'Net Incentive'],
+        ['NIP/NIK', 'NIK', 'Nama Pegawai', 'Unit', 'Nama Bank', 'No. Rekening', 'Nama Pemilik Rek', 'Status Pajak', 'P1 Score', 'P2 Score', 'P3 Score', 'Total Skor', 'Insentif Bruto', 'Pajak', 'Insentif Netto'],
         ...data.map((row: any) => [
           row.employee_code || '-',
+          row.nik || '-',
           row.employee_name,
-          row.unit,
+          row.unit || '-',
+          row.bank_name || '-',
+          row.bank_account_number || '-',
+          row.bank_account_holder || row.employee_name || '-',
+          row.tax_status || 'Non-PKP',
           row.p1_score,
           row.p2_score,
           row.p3_score,
@@ -51,12 +57,16 @@ export async function exportToExcel(options: ReportExportOptions): Promise<Buffe
     case 'kpi-achievement':
       sheetName = 'KPI Achievement'
       wsData = [
-        ['Indicator Name', 'Target Value', 'Realization Value', 'Achievement %'],
+        ['Nama Pegawai / Unit', 'Kategori', 'Indikator', 'Target', 'Realisasi', 'Capaian (%)', 'Nilai', 'Selisih (Gap)'],
         ...data.map((row: any) => [
+          row.employee_name || row.unit_name || '-',
+          row.category,
           row.indicator_name,
           row.target_value,
           row.realization_value,
           row.achievement_percentage,
+          row.score,
+          row.gap
         ]),
       ]
       break
@@ -74,31 +84,12 @@ export async function exportToExcel(options: ReportExportOptions): Promise<Buffe
       ]
       break
 
-    case 'employee-slip':
-      sheetName = 'Employee Slip'
-      wsData = [
-        ['NIP/NIK', 'Employee Name', 'Unit', 'P1 Score', 'P2 Score', 'P3 Score', 'Total Score', 'Gross Incentive', 'Tax Amount', 'Net Incentive'],
-        ...data.map((row: any) => [
-          row.employee_code || '-',
-          row.employee_name,
-          row.unit,
-          row.p1_score,
-          row.p2_score,
-          row.p3_score,
-          row.total_score,
-          row.gross_incentive,
-          row.tax_amount,
-          row.net_incentive,
-        ]),
-      ]
-      break
-
     default:
       throw new Error('Invalid report type')
   }
 
   // Fetch Company Info for Kop Surat
-  const companyInfo = await getCompanyInfo()
+  const companyInfo = await getCompanyInfoServer()
 
   // Build Kop Surat
   const kopSurat = [
@@ -157,7 +148,7 @@ export async function exportToExcel(options: ReportExportOptions): Promise<Buffe
   ws['!cols'] = colWidths
 
   // Add footer rows
-  const { data: footerData } = await getSetting('footer')
+  const { data: footerData } = await getSettingServer('footer')
   const footerText = footerData?.text || 'JASPEL Enterprise'
   const dateStr = new Date().toLocaleString('id-ID')
 
@@ -188,7 +179,7 @@ export async function exportToExcelFile({
   const wb = XLSX.utils.book_new()
 
   // Fetch Company Info for Kop Surat
-  const companyInfo = await getCompanyInfo()
+  const companyInfo = await getCompanyInfoServer()
 
   // Build Kop Surat
   const kopSurat = [
@@ -235,7 +226,7 @@ export async function exportToExcelFile({
   }
 
   // Add footer rows
-  const { data: footerData } = await getSetting('footer')
+  const { data: footerData } = await getSettingServer('footer')
   const footerText = footerData?.text || 'JASPEL Enterprise'
   const dateStr = new Date().toLocaleString('id-ID')
 

@@ -13,28 +13,40 @@ interface AssessmentStatus {
   completion_percentage: number
 }
 
-async function getAssessmentStatus(supabase: any, unitId: string | null, period: string): Promise<AssessmentStatus[]> {
+async function getAssessmentStatus(supabase: any, unitIdFilter: string | null, period: string): Promise<AssessmentStatus[]> {
   // Fetch employees
   let employeeQuery = supabase
     .from('m_employees')
     .select('id, full_name, unit_id, m_units(name)')
     .eq('is_active', true)
 
-  if (unitId) {
-    employeeQuery = employeeQuery.eq('unit_id', unitId)
+  if (unitIdFilter) {
+    employeeQuery = employeeQuery.eq('unit_id', unitIdFilter)
   }
 
   const { data: employees, error: empError } = await employeeQuery
   if (empError) throw empError
 
-  // Fetch all indicators
+  // Fetch all active indicators with their category and unit_id
   const { data: indicators, error: indError } = await supabase
     .from('m_kpi_indicators')
-    .select('id')
+    .select(`
+      id,
+      m_kpi_categories!inner (
+        unit_id
+      )
+    `)
     .eq('is_active', true)
   if (indError) throw indError
 
-  const totalIndicatorsCount = indicators?.length || 0
+  // Group indicator counts by unit_id
+  const indicatorsCountByUnit = (indicators || []).reduce((acc: Record<string, number>, curr: any) => {
+    const unitId = curr.m_kpi_categories?.unit_id
+    if (unitId) {
+      acc[unitId] = (acc[unitId] || 0) + 1
+    }
+    return acc
+  }, {})
 
   // Fetch assessments for the period
   const { data: assessments, error: assError } = await supabase
@@ -46,7 +58,8 @@ async function getAssessmentStatus(supabase: any, unitId: string | null, period:
   // Group assessments by employee
   const assessmentMap = new Map<string, Set<string>>()
   assessments?.forEach((ass: any) => {
-    if (ass.score !== null && ass.score !== undefined) {
+    // Treat as "assessed" if score is not null
+    if (ass.indicator_id) {
       if (!assessmentMap.has(ass.employee_id)) {
         assessmentMap.set(ass.employee_id, new Set())
       }
@@ -55,10 +68,15 @@ async function getAssessmentStatus(supabase: any, unitId: string | null, period:
   })
 
   return (employees || []).map((emp: any) => {
+    const totalIndicatorsCount = indicatorsCountByUnit[emp.unit_id] || 0
     const assessedCount = assessmentMap.get(emp.id)?.size || 0
+
     let status = 'Belum Dinilai'
     if (assessedCount > 0) {
-      status = assessedCount === totalIndicatorsCount ? 'Selesai' : 'Sebagian'
+      status = assessedCount >= totalIndicatorsCount ? 'Selesai' : 'Sebagian'
+    } else if (totalIndicatorsCount === 0) {
+      // If no indicators assigned to this unit, the user cannot assess them. Keep as Belum Dinilai.
+      status = 'Belum Dinilai'
     }
 
     return {
@@ -72,7 +90,7 @@ async function getAssessmentStatus(supabase: any, unitId: string | null, period:
       status: status,
       completion_percentage: totalIndicatorsCount > 0
         ? Math.round((assessedCount / totalIndicatorsCount) * 100)
-        : 0
+        : (assessedCount === 0 ? 0 : 100)
     }
   })
 }
@@ -141,6 +159,7 @@ export async function GET(request: NextRequest) {
       const summary = {
         total_employees: statuses.length,
         completed: statuses.filter(s => s.status === 'Selesai').length,
+        started: statuses.filter(s => s.assessed_indicators > 0).length,
         partial: statuses.filter(s => s.status === 'Sebagian').length,
         not_started: statuses.filter(s => s.status === 'Belum Dinilai').length,
         completion_rate: statuses.length > 0

@@ -6,11 +6,19 @@ import { PerformanceChart } from '@/components/dashboard/PerformanceChart'
 import { KPIDistributionChart } from '@/components/dashboard/KPIDistributionChart'
 import { TopPerformers } from '@/components/dashboard/TopPerformers'
 import { UnitPerformanceTable } from '@/components/dashboard/UnitPerformanceTable'
-import { RecentActivity } from '@/components/dashboard/RecentActivity'
+import { WorstPerformers } from '@/components/dashboard/WorstPerformers'
 import { QuickActions } from '@/components/dashboard/QuickActions'
 import { DashboardService } from '@/lib/services/dashboard.service'
 
-export async function DashboardContent() {
+export async function DashboardContent({
+  unitId,
+  period,
+  year
+}: {
+  unitId?: string,
+  period?: string,
+  year?: string
+}) {
   try {
     const supabase = await createClient()
 
@@ -45,8 +53,10 @@ export async function DashboardContent() {
     const unitData = employee.m_units as any
     const unitName = unitData?.name || 'Unit tidak diketahui'
 
+    let units: any[] = []
     let stats
     let topPerformers: any[] = []
+    let worstPerformers: any[] = []
     let unitPerformance: any[] = []
     let performanceTrend: any[] = []
     let kpiDistribution: any[] = []
@@ -54,30 +64,33 @@ export async function DashboardContent() {
 
     if (employee.role === 'superadmin') {
       try {
+        const { data: unitsData } = await supabase.from('m_units').select('id, name').order('name')
+        units = unitsData || []
+
         // OPTIMIZED: Parallel data loading for dashboard
         const [
           dashboardStats,
           topPerformersData,
+          worstPerformersData,
           unitPerformanceData,
           performanceTrendData,
           kpiDistributionData,
-          recentActivitiesData
         ] = await Promise.allSettled([
-          DashboardService.getSuperadminStats(),
-          DashboardService.getTopPerformers(5),
-          DashboardService.getUnitPerformance(),
-          DashboardService.getPerformanceTrend(6),
-          DashboardService.getKPIDistribution(),
-          DashboardService.getRecentActivities(8)
+          DashboardService.getSuperadminStats(unitId, period, year),
+          DashboardService.getTopPerformers(5, unitId, period, year),
+          DashboardService.getWorstPerformers(5, unitId, period, year),
+          DashboardService.getUnitPerformance(period, year),
+          DashboardService.getPerformanceTrend(6, unitId, period, year),
+          DashboardService.getKPIDistribution(unitId, period, year)
         ])
 
         // Process results with fallbacks
-        stats = dashboardStats.status === 'fulfilled' ? dashboardStats.value : await DashboardService.getSuperadminStats()
+        stats = dashboardStats.status === 'fulfilled' ? dashboardStats.value : await DashboardService.getSuperadminStats(unitId, period, year)
         topPerformers = topPerformersData.status === 'fulfilled' ? topPerformersData.value : []
+        worstPerformers = worstPerformersData.status === 'fulfilled' ? worstPerformersData.value : []
         unitPerformance = unitPerformanceData.status === 'fulfilled' ? unitPerformanceData.value : []
         performanceTrend = performanceTrendData.status === 'fulfilled' ? performanceTrendData.value : []
         kpiDistribution = kpiDistributionData.status === 'fulfilled' ? kpiDistributionData.value : []
-        recentActivities = recentActivitiesData.status === 'fulfilled' ? recentActivitiesData.value : []
       } catch (serviceError) {
         console.error('Dashboard service error:', serviceError)
         // Set default values if service fails
@@ -114,6 +127,7 @@ export async function DashboardContent() {
               showUnitFilter={true}
               showPeriodFilter={true}
               showExport={true}
+              units={units}
             />
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -162,7 +176,7 @@ export async function DashboardContent() {
               </div>
               <div className="space-y-6">
                 <TopPerformers performers={topPerformers} />
-                <RecentActivity activities={recentActivities} />
+                <WorstPerformers performers={worstPerformers} />
               </div>
             </div>
 

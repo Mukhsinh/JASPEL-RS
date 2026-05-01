@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let buffer: Buffer
+    let buffer: Buffer | Uint8Array
     let contentType: string
     let filename: string
 

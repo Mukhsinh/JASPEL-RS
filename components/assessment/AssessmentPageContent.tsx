@@ -39,6 +39,7 @@ export default function AssessmentPageContent({
   const [summary, setSummary] = useState({
     total_employees: 0,
     completed: 0,
+    started: 0,
     partial: 0,
     not_started: 0,
     completion_rate: 0
@@ -97,6 +98,7 @@ export default function AssessmentPageContent({
         setSummary(data.summary || {
           total_employees: 0,
           completed: 0,
+          started: 0,
           partial: 0,
           not_started: 0,
           completion_rate: 0
@@ -213,9 +215,11 @@ export default function AssessmentPageContent({
             <CardTitle className="text-sm font-medium">Selesai Dinilai</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{summary.completed}</div>
+            <div className="text-2xl font-bold text-green-600">
+              {summary.completed} <span className="text-sm text-muted-foreground font-normal">dari {summary.total_employees}</span>
+            </div>
             <p className="text-xs text-muted-foreground">
-              {summary.partial} sebagian, {summary.not_started} belum
+              {summary.started} orang telah mulai dinilai
             </p>
           </CardContent>
         </Card>

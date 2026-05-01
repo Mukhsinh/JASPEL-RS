@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ interface DashboardFiltersProps {
   showUnitFilter?: boolean
   showPeriodFilter?: boolean
   showExport?: boolean
+  units?: Array<{ id: string, name: string }>
 }
 
 export interface FilterState {
@@ -19,23 +20,28 @@ export interface FilterState {
   year: string
 }
 
-export function DashboardFilters({ 
-  onFilterChange, 
+export function DashboardFilters({
+  onFilterChange,
   showUnitFilter = false,
   showPeriodFilter = true,
-  showExport = true
+  showExport = true,
+  units = []
 }: DashboardFiltersProps) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const currentYear = new Date().getFullYear()
-  const [filters, setFilters] = useState<FilterState>({
-    period: 'month',
-    year: currentYear.toString(),
-    unit: 'all'
-  })
 
-  const handleFilterChange = (key: keyof FilterState, value: string) => {
-    const newFilters = { ...filters, [key]: value }
-    setFilters(newFilters)
-    onFilterChange?.(newFilters)
+  const currentUnit = searchParams.get('unit_id') || 'all'
+  const currentYearVal = searchParams.get('year') || currentYear.toString()
+
+  const handleFilterChange = (key: string, value: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (value === 'all' || !value) {
+      params.delete(key)
+    } else {
+      params.set(key, value)
+    }
+    router.push(`?${params.toString()}`)
   }
 
   return (
@@ -51,22 +57,45 @@ export function DashboardFilters({
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-gray-500" />
               <select
-                value={filters.period}
+                value={searchParams.get('period') || 'month'}
                 onChange={(e) => handleFilterChange('period', e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="week">Minggu Ini</option>
-                <option value="month">Bulan Ini</option>
-                <option value="quarter">Kuartal Ini</option>
-                <option value="year">Tahun Ini</option>
-                <option value="custom">Kustom</option>
+                <optgroup label="Bulan">
+                  <option value="M-01">Januari</option>
+                  <option value="M-02">Februari</option>
+                  <option value="M-03">Maret</option>
+                  <option value="M-04">April</option>
+                  <option value="M-05">Mei</option>
+                  <option value="M-06">Juni</option>
+                  <option value="M-07">Juli</option>
+                  <option value="M-08">Agustus</option>
+                  <option value="M-09">September</option>
+                  <option value="M-10">Oktober</option>
+                  <option value="M-11">November</option>
+                  <option value="M-12">Desember</option>
+                </optgroup>
+                <optgroup label="Kuartal">
+                  <option value="Q-1">Kuartal 1</option>
+                  <option value="Q-2">Kuartal 2</option>
+                  <option value="Q-3">Kuartal 3</option>
+                  <option value="Q-4">Kuartal 4</option>
+                </optgroup>
+                <optgroup label="Semester">
+                  <option value="S-1">Semester 1</option>
+                  <option value="S-2">Semester 2</option>
+                </optgroup>
+                <optgroup label="Lainnya">
+                  <option value="full-year">Akhir Tahun</option>
+                  <option value="month">Bulan Ini</option>
+                </optgroup>
               </select>
             </div>
           )}
 
           <div className="flex items-center gap-2">
             <select
-              value={filters.year}
+              value={currentYearVal}
               onChange={(e) => handleFilterChange('year', e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
@@ -79,12 +108,14 @@ export function DashboardFilters({
           {showUnitFilter && (
             <div className="flex items-center gap-2">
               <select
-                value={filters.unit}
-                onChange={(e) => handleFilterChange('unit', e.target.value)}
+                value={currentUnit}
+                onChange={(e) => handleFilterChange('unit_id', e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="all">Semua Unit</option>
-                {/* Unit options will be populated dynamically */}
+                {units.map(unit => (
+                  <option key={unit.id} value={unit.id}>{unit.name}</option>
+                ))}
               </select>
             </div>
           )}

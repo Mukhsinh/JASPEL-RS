@@ -44,19 +44,19 @@ interface MenuItem {
 }
 
 const iconMap: Record<string, any> = {
-  LayoutDashboard,
-  Users,
-  UserCheck,
-  Building2,
-  Target,
-  Wallet,
-  FileText,
-  BarChart3,
-  Settings,
-  Shield,
-  User,
-  Bell,
-  ClipboardCheck,
+  LayoutDashboard: LayoutDashboard || User,
+  Users: Users || User,
+  UserCheck: UserCheck || User,
+  Building2: Building2 || User,
+  Target: Target || User,
+  Wallet: Wallet || User,
+  FileText: FileText || User,
+  BarChart3: BarChart3 || User,
+  Settings: Settings || User,
+  Shield: Shield || User,
+  User: User,
+  Bell: Bell || User,
+  ClipboardCheck: ClipboardCheck || User,
 }
 
 // Simple auth hook
@@ -184,6 +184,13 @@ function getMenuItems(role: string): MenuItem[] {
 export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+
+  useEffect(() => {
+    const saved = localStorage.getItem('sidebar-collapsed')
+    if (saved) {
+      setIsCollapsed(JSON.parse(saved))
+    }
+  }, [])
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [unitName, setUnitName] = useState('')
@@ -269,7 +276,22 @@ export default function Sidebar() {
     setIsMounted(true)
   }, [])
 
-  if (!isMounted || loading) {
+  if (!isMounted) {
+    return (
+      <aside className="fixed left-0 top-0 h-screen w-72 bg-white border-r border-gray-200 hidden lg:block z-50">
+        <div className="p-4">
+          <div className="h-8 bg-gray-100 rounded mb-4 animate-pulse"></div>
+          <div className="space-y-2">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-10 bg-gray-50 rounded animate-pulse"></div>
+            ))}
+          </div>
+        </div>
+      </aside>
+    )
+  }
+
+  if (loading) {
     return (
       <aside className="fixed left-0 top-0 h-screen w-72 bg-white border-r border-gray-200 hidden lg:block z-50">
         <div className="p-4 animate-pulse">
