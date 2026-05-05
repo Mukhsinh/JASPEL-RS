@@ -571,7 +571,8 @@ export async function generateAssessmentGuidePDF(unitName: string = 'Seluruh Uni
     body: componentsBody,
     theme: 'grid',
     headStyles: { fillColor: [44, 62, 80], textColor: 255 },
-    styles: { fontSize: 10, cellPadding: 4 }
+    styles: { fontSize: 10, cellPadding: 4 },
+    margin: { left: 15, right: 15, bottom: 25 }
   })
 
   currentY = (doc as any).lastAutoTable.finalY + 12
@@ -658,13 +659,13 @@ export async function generateAssessmentGuidePDF(unitName: string = 'Seluruh Uni
           subs.forEach(s => {
             const criteria = s.scoring_criteria as any[] || []
             const criteriaText = criteria.length > 0
-              ? criteria.map(c => `[${c.score}] ${c.label}`).join('  ')
-              : 'Sesuai target'
+              ? criteria.map(c => `      [${c.score}] ${c.label}`).join('\n')
+              : '      Sesuai target'
 
             bodyData.push([
               `   ${s.code}`,
               {
-                content: `   • ${s.name}\n      Kriteria Skor: ${criteriaText}`,
+                content: `   • ${s.name}\n\n      Kriteria Skor:\n${criteriaText}`,
                 styles: { fontSize: 8 }
               },
               { content: `${s.weight_percentage}%`, styles: { halign: 'center' as const, fontSize: 8 } },
@@ -688,13 +689,13 @@ export async function generateAssessmentGuidePDF(unitName: string = 'Seluruh Uni
             3: { cellWidth: 22 },
             4: { cellWidth: 20 }
           },
-          margin: { left: 15, right: 15 },
+          margin: { left: 15, right: 15, bottom: 25 },
         })
 
         currentY = (doc as any).lastAutoTable.finalY + 8
 
         // Safety check for next indicator
-        if (currentY > 260) {
+        if (currentY > 255) {
           doc.addPage()
           currentY = 20
         }
