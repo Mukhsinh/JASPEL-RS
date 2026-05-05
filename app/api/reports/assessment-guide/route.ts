@@ -3,9 +3,9 @@ import { generateAssessmentGuidePDF } from '@/lib/export/pdf-export'
 
 export async function POST(request: NextRequest) {
     try {
-        const { unitName } = await request.json()
+        const { unitName, unitId } = await request.json()
 
-        const pdfBytes = await generateAssessmentGuidePDF(unitName)
+        const pdfBytes = await generateAssessmentGuidePDF(unitName, unitId)
 
         return new Response(pdfBytes as any, {
             headers: {

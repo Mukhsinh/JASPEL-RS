@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { getCompanyInfoServer, getSettingServer } from '@/lib/services/settings.server.service'
+import { createClient } from '@/lib/supabase/server'
 
 interface IncentiveSlipData {
   period: string
@@ -515,7 +516,7 @@ export async function exportToPDF(options: ReportExportOptions): Promise<Uint8Ar
 /**
  * Generate Assessment Guide PDF
  */
-export async function generateAssessmentGuidePDF(unitName: string = 'Seluruh Unit'): Promise<Uint8Array> {
+export async function generateAssessmentGuidePDF(unitName: string = 'Seluruh Unit', unitId?: string | null): Promise<Uint8Array> {
   const doc = new jsPDF()
   const companyInfo = await getCompanyInfoServer()
   const footerSetting = await getSettingServer('footer')
@@ -525,54 +526,197 @@ export async function generateAssessmentGuidePDF(unitName: string = 'Seluruh Uni
 
   const centerX = doc.internal.pageSize.width / 2
 
-  doc.setFontSize(14)
+  doc.setFontSize(16)
   doc.setFont('helvetica', 'bold')
-  doc.text('PETUNJUK PENILAIAN KPI (JASPEL)', centerX, 42, { align: 'center' })
-  doc.setFontSize(11)
-  doc.text(`Unit Kerja: ${unitName}`, centerX, 49, { align: 'center' })
-
+  doc.text('PEDOMAN DAN PETUNJUK PENILAIAN KPI', centerX, 45, { align: 'center' })
   doc.setFontSize(12)
-  doc.text('1. Komponen Penilaian', 15, 60)
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(10)
+  doc.text(`UNIT KERJA: ${unitName.toUpperCase()}`, centerX, 52, { align: 'center' })
+
+  // Current Y position after header
+  let currentY = 65
+
+  // Fetch KPI Configuration Data
+  let categories: any[] = []
+  if (unitId) {
+    const supabase = await createClient()
+    const { data } = await supabase
+      .from('m_kpi_categories')
+      .select('*')
+      .eq('unit_id', unitId)
+      .order('category')
+    categories = data || []
+  }
+
+  // 1. Overview Section
+  doc.setFontSize(12)
+  doc.setFont('helvetica', 'bold')
+  doc.text('I. KOMPONEN DAN BOBOT PENILAIAN', 15, currentY)
+  currentY += 5
+
+  const componentsBody = categories.length > 0
+    ? categories.map(cat => [
+      `${cat.category} (${cat.category_name})`,
+      `${cat.weight_percentage}%`,
+      cat.description || '-'
+    ])
+    : [
+      ['P1 (Utama)', '55%', 'Penilaian capaian indikator kinerja utama sesuai tupoksi/jabatan.'],
+      ['P2 (Tambahan)', '25%', 'Penilaian aktivitas/tugas tambahan di luar tupoksi utama.'],
+      ['P3 (Perilaku)', '20%', 'Penilaian sikap, kedisiplinan, kerja tim, dan potensi pengembangan.'],
+    ]
 
   autoTable(doc, {
-    startY: 65,
-    head: [['Komponen', 'Bobot', 'Deskripsi']],
-    body: [
-      ['P1 (Kinerja Utama/Posisi)', '55%', 'Penilaian capaian indikator kinerja utama sesuai tupoksi.'],
-      ['P2 (Kinerja Tambahan)', '25%', 'Penilaian aktivitas/tugas tambahan di luar tupoksi utama.'],
-      ['P3 (Perilaku/Potensi)', '20%', 'Penilaian sikap, kedisiplinan, dan potensi pengembangan.'],
-    ],
-    theme: 'striped'
+    startY: currentY,
+    head: [['Komponen', 'Bobot', 'Deskripsi Penilaian']],
+    body: componentsBody,
+    theme: 'grid',
+    headStyles: { fillColor: [44, 62, 80], textColor: 255 },
+    styles: { fontSize: 10, cellPadding: 4 }
   })
 
-  const nextY = (doc as any).lastAutoTable.finalY + 10
+  currentY = (doc as any).lastAutoTable.finalY + 12
+
+  // 2. Calculation Section
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(12)
-  doc.text('2. Kalkulasi Skor Akhir', 15, nextY)
+  doc.text('II. STANDAR PENGHITUNGAN SKOR', 15, currentY)
+  currentY += 7
+
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(10)
-  doc.text('Skor Akhir = (Skor P1 x 0.55) + (Skor P2 x 0.25) + (Skor P3 x 0.20)', 15, nextY + 7)
+  doc.text('1. Rumus Skor Akhir Individu:', 15, currentY); currentY += 6
 
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(12)
-  doc.text('3. Kalkulasi Insentif (PIR)', 15, nextY + 20)
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(10)
-  doc.text('PIR (Poin Indeks Rupiah) = Alokasi Unit / Total Skor Unit', 15, nextY + 27)
-  doc.setFont('courier', 'normal')
-  doc.text('Insentif Bruto = Total Skor Pegawai x PIR', 20, nextY + 34)
+  const formula = categories.length > 0
+    ? `Total Skor = ` + categories.map(cat => `(Skor ${cat.category} x ${cat.weight_percentage}%)`).join(' + ')
+    : 'Total Skor = (Skor P1 x 55%) + (Skor P2 x 25%) + (Skor P3 x 20%)'
+
+  doc.setFont('courier', 'bold')
+  doc.text(`   ${formula}`, 15, currentY); currentY += 8
 
   doc.setFont('helvetica', 'normal')
-  doc.text('Dimana Alokasi Unit = Net Pool x Proporsi Unit (%).', 15, nextY + 42)
-  doc.text('Insentif Netto = Bruto - PPh 21 (progresif UU HPP).', 15, nextY + 49)
+  doc.text('2. Rumus Nilai Capaian Indikator:', 15, currentY); currentY += 6
+  doc.setFont('courier', 'bold')
+  doc.text('   Capaian = (Realisasi / Target) x 100%', 15, currentY); currentY += 5
+  doc.text('   Nilai   = (Capaian x Bobot Indikator) / 100', 15, currentY); currentY += 12
 
-  // Footer
-  const pageHeight = doc.internal.pageSize.height
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'italic')
-  doc.text(footerText, centerX, pageHeight - 10, { align: 'center' })
+  // 3. Detailed KPI Structure Section
+  if (categories && categories.length > 0) {
+    const supabase = await createClient()
+
+    if (currentY > 220) {
+      doc.addPage()
+      currentY = 20
+    }
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(12)
+    doc.text('III. RINCIAN INDIKATOR DAN SUB-INDIKATOR KPI', 15, currentY)
+    currentY += 5
+
+    for (const cat of categories) {
+      const { data: indicators } = await supabase
+        .from('m_kpi_indicators')
+        .select('*')
+        .eq('category_id', cat.id)
+        .order('code')
+
+      if (!indicators || indicators.length === 0) continue
+
+      // Check page break for category title
+      if (currentY > 250) {
+        doc.addPage()
+        currentY = 20
+      }
+
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(11)
+      doc.setFillColor(240, 240, 240)
+      doc.rect(15, currentY, 180, 8, 'F')
+      doc.text(`KATEGORI: ${cat.category} - ${cat.category_name}`, 18, currentY + 6)
+      currentY += 12
+
+      for (const ind of indicators) {
+        const { data: subs } = await supabase
+          .from('m_kpi_sub_indicators')
+          .select('*')
+          .eq('indicator_id', ind.id)
+          .order('code')
+
+        const bodyData = []
+
+        // Add main indicator info
+        bodyData.push([
+          { content: `${ind.code}`, styles: { fontStyle: 'bold' as const } },
+          { content: `${ind.name}`, styles: { fontStyle: 'bold' as const } },
+          { content: `${ind.weight_percentage}%`, styles: { fontStyle: 'bold' as const, halign: 'center' as const } },
+          { content: `${ind.target_value ?? 0} ${ind.target_unit || ''}`, styles: { fontStyle: 'bold' as const, halign: 'center' as const } },
+          { content: '-', styles: { halign: 'center' as const } }
+        ])
+
+        // Add sub indicators if any
+        if (subs && subs.length > 0) {
+          subs.forEach(s => {
+            const criteria = s.scoring_criteria as any[] || []
+            const criteriaText = criteria.length > 0
+              ? criteria.map(c => `[${c.score}] ${c.label}`).join('  ')
+              : 'Sesuai target'
+
+            bodyData.push([
+              `   ${s.code}`,
+              {
+                content: `   • ${s.name}\n      Kriteria Skor: ${criteriaText}`,
+                styles: { fontSize: 8 }
+              },
+              { content: `${s.weight_percentage}%`, styles: { halign: 'center' as const, fontSize: 8 } },
+              { content: `${s.target_value ?? '-'}`, styles: { halign: 'center' as const, fontSize: 8 } },
+              { content: 'Multi-Skor', styles: { halign: 'center' as const, fontSize: 8, fontStyle: 'italic' as const } }
+            ])
+          })
+        }
+
+        autoTable(doc, {
+          startY: currentY,
+          head: [['Kode', 'Indikator / Sub-Indikator', 'Bobot', 'Target', 'Skor Poin']],
+          body: bodyData,
+          theme: 'grid',
+          headStyles: { fillColor: [52, 73, 94], textColor: 255, fontSize: 9 },
+          styles: { fontSize: 8.5, cellPadding: 2.5 },
+          columnStyles: {
+            0: { cellWidth: 20 },
+            1: { cellWidth: 100 },
+            2: { cellWidth: 18 },
+            3: { cellWidth: 22 },
+            4: { cellWidth: 20 }
+          },
+          margin: { left: 15, right: 15 },
+        })
+
+        currentY = (doc as any).lastAutoTable.finalY + 8
+
+        // Safety check for next indicator
+        if (currentY > 260) {
+          doc.addPage()
+          currentY = 20
+        }
+      }
+      currentY += 5
+    }
+  } else {
+    // Basic fallback if no unit selected
+    const nextY = 110
+    doc.setFont('helvetica', 'italic')
+    doc.text('Catatan: Silakan pilih unit spesifik untuk melihat rincian indikator yang berlaku.', 15, nextY)
+  }
+
+  // Footer for all pages
+  const pageCount = (doc as any).internal.getNumberOfPages()
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i)
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'italic')
+    doc.text(footerText, centerX, doc.internal.pageSize.height - 15, { align: 'center' })
+    doc.text(`Halaman ${i} dari ${pageCount}`, doc.internal.pageSize.width - 25, doc.internal.pageSize.height - 15)
+  }
 
   return new Uint8Array(doc.output('arraybuffer'))
 }

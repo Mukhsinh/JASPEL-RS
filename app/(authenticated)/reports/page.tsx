@@ -122,7 +122,10 @@ export default function ReportsPage() {
       const response = await fetch('/api/reports/assessment-guide', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ unitName: selectedUnitName }),
+        body: JSON.stringify({
+          unitName: selectedUnitName,
+          unitId: selectedUnit === 'all' ? null : selectedUnit
+        }),
       })
 
       if (!response.ok) throw new Error('Gagal mengunduh petunjuk')
